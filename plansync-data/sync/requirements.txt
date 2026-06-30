@@ -1,0 +1,2 @@
+requests>=2.31.0
+todoist-api-python>=2.1.0

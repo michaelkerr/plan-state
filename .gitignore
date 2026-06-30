@@ -1,0 +1,48 @@
+# Secrets
+.env
+gideon-data/.env
+
+# macOS resource forks
+._*
+.DS_Store
+
+# Hermes runtime data
+gideon-data/sessions/
+gideon-data/memory/
+gideon-data/logs/
+gideon-data/cache/
+gideon-data/cron/
+gideon-data/bin/
+gideon-data/.local/
+gideon-data/auth.json
+gideon-data/auth.lock
+gideon-data/gateway.pid
+gideon-data/gateway_state.json
+gideon-data/kanban.db
+gideon-data/channel_directory.json
+gideon-data/context_length_cache.yaml
+gideon-data/SOUL.md
+gideon-data/.skills_prompt_snapshot.json
+gideon-data/config.yaml.bak*
+
+# Hermes bundled skills — track only our plansync skills via negation
+gideon-data/skills/*
+!gideon-data/skills/plansync.md
+!gideon-data/skills/plansync-briefing.md
+
+# SQLite runtime files
+*.db
+*.db-wal
+*.db-shm
+
+# Hermes lock files
+gideon-data/gateway.lock
+gideon-data/*.lock
+gideon-data/kanban/.dispatcher.lock
+
+# Sync output (runtime data)
+plansync-data/sync-output/*.json
+
+# Python
+__pycache__/
+*.pyc

@@ -1,0 +1,74 @@
+services:
+  gateway:
+    image: nousresearch/hermes-agent:${HERMES_VERSION:?Set HERMES_VERSION in .env}
+    container_name: gideon-gateway
+    restart: unless-stopped
+    command: gateway run
+    env_file:
+      - .env
+    environment:
+      - HERMES_UID=${HERMES_UID:-1000}
+      - HERMES_GID=${HERMES_GID:-1000}
+    volumes:
+      - ./gideon-data:/opt/data
+      - ./plansync-data:/opt/plansync
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "hermes"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "2.0"
+          pids: 256
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - DAC_OVERRIDE
+      - CHOWN
+      - FOWNER
+      - SETUID
+      - SETGID
+    tmpfs:
+      - /tmp:rw,nosuid,size=512m
+      - /var/tmp:rw,noexec,nosuid,size=256m
+    networks:
+      - plansync-net
+
+  dashboard:
+    image: nousresearch/hermes-agent:${HERMES_VERSION:?Set HERMES_VERSION in .env}
+    container_name: gideon-dashboard
+    restart: unless-stopped
+    command: dashboard
+    ports:
+      - "${DASHBOARD_BIND:-127.0.0.1}:9119:9119"
+    environment:
+      - HERMES_DASHBOARD=1
+      - HERMES_DASHBOARD_HOST=0.0.0.0
+      - HERMES_DASHBOARD_BASIC_AUTH_USERNAME=${DASHBOARD_USERNAME:?Set DASHBOARD_USERNAME}
+      - HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=${DASHBOARD_PASSWORD:?Set DASHBOARD_PASSWORD}
+      - HERMES_DASHBOARD_BASIC_AUTH_SECRET=${DASHBOARD_SECRET:?Set DASHBOARD_SECRET}
+    volumes:
+      - ./gideon-data:/opt/data:ro
+      - ./plansync-data:/opt/plansync:ro
+    depends_on:
+      gateway:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+    networks:
+      - plansync-net
+
+networks:
+  plansync-net:
+    driver: bridge
