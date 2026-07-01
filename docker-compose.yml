@@ -54,7 +54,7 @@ services:
       - HERMES_DASHBOARD_BASIC_AUTH_PASSWORD=${DASHBOARD_PASSWORD:?Set DASHBOARD_PASSWORD}
       - HERMES_DASHBOARD_BASIC_AUTH_SECRET=${DASHBOARD_SECRET:?Set DASHBOARD_SECRET}
     volumes:
-      - ./gideon-data:/opt/data:ro
+      - ./gideon-data:/opt/data
       - ./plansync-data:/opt/plansync:ro
     depends_on:
       gateway:
