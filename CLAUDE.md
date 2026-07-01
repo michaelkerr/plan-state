@@ -42,11 +42,11 @@ plan-state/
 ├── sync/
 │   ├── daily_sync.py           # 7-step deterministic sync pipeline (~650 lines)
 │   └── requirements.txt        # requests, todoist-api-python
-├── scripts/                    # Cron wrappers (copied to Hermes data dir by register.sh)
+├── scripts/                    # Cron wrappers (symlinked into Hermes data dir by register.sh)
 │   ├── daily-sync.py           # Delegates to sync/daily_sync.py
 │   ├── briefing-context.py     # Reads sync output + DB for LLM briefing
 │   └── briefing-context.sh     # Shell wrapper for briefing-context.py
-├── skills/                     # Hermes skills (copied to Hermes data dir by register.sh)
+├── skills/                     # Hermes skills (loaded via external_dirs, live immediately)
 │   ├── plansync.md             # MCP tool workflow and trigger format reference
 │   ├── plansync-briefing.md    # Morning briefing generation instructions
 │   └── domain-authoring.md     # Guides LLM through domain planning conversation → load_domain
@@ -60,7 +60,7 @@ plan-state/
 
 **Sibling repo**: `../gideon/` contains Hermes infrastructure (docker-compose.yml, .env, config.yaml). Plan-state registers itself into Gideon via `register.sh`.
 
-**Volume mounts**: `mcp-server/server.py`, `sync/daily_sync.py`, `schema.sql`, and `init-db.py` are volume-mounted into the container at `/opt/plansync/`. Edits to these are live immediately. Skills and scripts are *copied* by `register.sh` and require re-running it after changes.
+**Volume mounts**: The entire plan-state repo is volume-mounted into the container at `/opt/plansync/`. Edits to any file are live immediately — skills are loaded via Hermes `external_dirs`, scripts are symlinked, and MCP server/sync code is accessed directly. The MCP server is configured in Gideon's `config.yaml`; `register.sh` only handles one-time setup (DB init, pip deps, cron job registration).
 
 ## Conventions
 - Database IDs are 12-char hex strings from `uuid4().hex[:12]`
@@ -77,7 +77,7 @@ plan-state/
 - Do not evaluate weather conditions or sync to Todoist during planning conversations -- the cron job handles that
 - Do not delete and recreate activities to modify them -- use update_activity
 - Do not add external service dependencies to the automated cron pipeline without asking the user first -- additional external API calls beyond weather and Todoist need to be evaluated
-- Do not break the volume-mount contract: files at the repo root and in mcp-server/sync/ are mounted live; files in skills/scripts/ are copied by register.sh
+- Do not break the volume-mount contract: the entire repo is mounted at /opt/plansync/; skills are loaded via external_dirs, scripts are symlinked into /opt/data/scripts/, MCP server config lives in Gideon's config.yaml
 
 ## Decisions
 - **Hermes Agent, not raw Claude sessions** -- persistent memory, skill system, Telegram integration, cron scheduling all come free

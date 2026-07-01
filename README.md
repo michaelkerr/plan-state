@@ -34,9 +34,14 @@ cd ../plan-state
 ./register.sh
 ```
 
-`register.sh` copies skills and scripts, initializes the database, installs Python dependencies, and registers the MCP server and cron jobs. Re-run it after changing files in `skills/` or `scripts/`.
+`register.sh` symlinks scripts, initializes the database, installs Python dependencies, and registers cron jobs. The entire repo is volume-mounted into the container at `/opt/plansync/`, so edits to all files are live immediately:
 
-Files in `mcp-server/`, `sync/`, and the repo root (`schema.sql`, `init-db.py`) are volume-mounted into the container -- edits are live immediately without re-running `register.sh`.
+- **Skills**: loaded via Hermes `external_dirs` (configured in Gideon's `config.yaml`)
+- **Scripts**: symlinked into `/opt/data/scripts/` by `register.sh`
+- **MCP server**: configured in Gideon's `config.yaml` (`mcp_servers.plansync`)
+- **Sync pipeline, schema, init**: accessed directly via the volume mount
+
+Re-run `register.sh` only after adding new script files or cron jobs.
 
 ## Verify
 
