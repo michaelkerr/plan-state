@@ -62,7 +62,7 @@ Plan-state is a condition-aware activity orchestrator for personal life domains.
 - **Notes**: Add to mcp-server/server.py alongside existing tools.
 
 ### Step 8: Domain authoring skill
-- **Status**: not started
+- **Status**: complete
 - **What it does**: A skill document (markdown) that teaches an LLM how to run a domain planning conversation and produce a valid domain definition. Covers: how to probe for trigger conditions and lead times, how to structure prep chains, how to format the output, and examples of complete definitions.
 - **What good looks like**: A user says "help me plan my fall garden" and the LLM produces a valid domain definition that can be passed directly to load_domain. The skill works with both Hermes (local LLM) and Claude.
 - **Test**: manual -- run the skill with a test domain conversation and verify the output validates against the schema
