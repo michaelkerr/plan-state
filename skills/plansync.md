@@ -12,7 +12,8 @@ conditions, prep steps, and Todoist sync state.
 - update_activity(...) -- modify an existing activity
 - complete_activity(...) -- mark done, cascade follow-ups
 - defer_activity(...) -- push dates, re-cascade
-- create_domain(...) -- new domain
+- create_domain(...) -- new domain (single domain, no activities)
+- load_domain(definition) -- bulk-load a complete domain with all activities, steps, conditions in one call
 - add_observation(...) -- record field observation
 - get_upcoming(days_ahead) -- cross-domain upcoming view
 - get_weather_current(location) -- latest weather + forecast

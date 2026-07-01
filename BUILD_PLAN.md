@@ -64,7 +64,7 @@ Plan-state is a condition-aware activity orchestrator for personal life domains.
 ### Step 8: Domain authoring skill
 - **Status**: not started
 - **What it does**: A skill document (markdown) that teaches an LLM how to run a domain planning conversation and produce a valid domain definition. Covers: how to probe for trigger conditions and lead times, how to structure prep chains, how to format the output, and examples of complete definitions.
-- **What good looks like**: A user says "help me plan my fall garden" and the LLM produces a valid domain definition that can be passed directly to load_domain. The skill works with both Hermes (local Qwen3) and Claude.
+- **What good looks like**: A user says "help me plan my fall garden" and the LLM produces a valid domain definition that can be passed directly to load_domain. The skill works with both Hermes (local LLM) and Claude.
 - **Test**: manual -- run the skill with a test domain conversation and verify the output validates against the schema
 - **Builds on**: Steps 6, 7
 - **Notes**: Should be portable across models. For Hermes/smaller models: more structured input, more examples, tighter constraints. See PRD FR-17.1.

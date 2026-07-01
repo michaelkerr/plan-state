@@ -28,7 +28,7 @@ A condition-aware activity orchestrator for personal life domains (lawn care, ga
 - **Weather**: OpenWeatherMap API (current + forecast)
 - **Runtime**: Docker container running Hermes Agent, deployed on Mac Mini
 - **Messaging**: Telegram (via Hermes gateway)
-- **LLM**: Qwen3 14B via Ollama (local, LAN machine) for automated tasks; cloud LLM for interactive sessions
+- **LLM**: Local model via Ollama (LAN machine) for automated tasks; cloud LLM for interactive sessions
 
 ## Project structure
 ```
@@ -37,7 +37,7 @@ plan-state/
 ├── schema.sql                  # SQLite schema (7 tables)
 ├── init-db.py                  # Database initializer
 ├── mcp-server/
-│   ├── server.py               # MCP server (10 tools) over stdio JSON-RPC
+│   ├── server.py               # MCP server (11 tools) over stdio JSON-RPC
 │   └── requirements.txt        # mcp>=1.0.0
 ├── sync/
 │   ├── daily_sync.py           # 7-step deterministic sync pipeline (~650 lines)
@@ -48,7 +48,8 @@ plan-state/
 │   └── briefing-context.sh     # Shell wrapper for briefing-context.py
 ├── skills/                     # Hermes skills (copied to Hermes data dir by register.sh)
 │   ├── plansync.md             # MCP tool workflow and trigger format reference
-│   └── plansync-briefing.md    # Morning briefing generation instructions
+│   ├── plansync-briefing.md    # Morning briefing generation instructions
+│   └── domain-authoring.md     # Guides LLM through domain planning conversation → load_domain
 ├── sync-output/                # Daily JSON summaries (runtime, gitignored)
 └── docs/
     ├── STATUS.md               # Session-level state tracking
@@ -83,7 +84,7 @@ plan-state/
 - **SQLite, not Postgres** -- single-user system on a home server, no need for a database server
 - **Deterministic cron, not LLM-in-the-loop** -- weather eval, trigger logic, date cascading, Todoist sync are all rule-based. Zero tokens, zero latency, zero external dependency beyond APIs
 - **Todoist as task surface** -- user already lives in Todoist; tasks appear there naturally
-- **Local LLM for automated tasks** -- zero marginal cost, no external dependency for the morning briefing pipeline
+- **Local LLM for automated tasks** -- zero marginal cost, no external dependency for the morning briefing pipeline. Model is swappable via Hermes config.
 - **Split repos (plan-state + gideon)** -- Hermes infrastructure can be upgraded independently from this capability
 
 ## Inconsistencies

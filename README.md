@@ -58,7 +58,7 @@ See [BUILD_PLAN.md](BUILD_PLAN.md) for current status and next steps.
 
 **Why Hermes Agent, not raw Claude sessions?** Persistent cross-session memory, a skill system, Telegram integration, and cron scheduling come built-in. No custom infrastructure to maintain.
 
-**Why a deterministic cron pipeline?** Weather evaluation, trigger logic, date cascading, and Todoist sync are all rule-based. Running them without LLM involvement means zero token cost, zero latency, and zero external dependency beyond the weather and Todoist APIs. The LLM is reserved for where it adds value: planning conversations and contextual briefings.
+**Why a deterministic cron pipeline?** Weather evaluation, trigger logic, date cascading, and Todoist sync are all rule-based. Running them without LLM involvement means zero token cost, zero latency, and zero external dependency beyond the weather and Todoist APIs. The LLM is reserved for where it adds value: planning conversations and contextual briefings. The local model is swappable via Hermes config -- the system is model-agnostic.
 
 **Why Todoist?** The user already lives in Todoist. Tasks appear there naturally alongside everything else, with cascaded due dates and contextual descriptions. No new app to check.
 
