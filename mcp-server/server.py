@@ -13,7 +13,6 @@ from mcp.server.stdio import stdio_server
 import mcp.types as types
 
 DB_PATH = os.environ.get("PLANSYNC_DB", "/opt/plansync/plansync.db")
-SCHEMA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "schema.sql")
 
 server = Server("plansync")
 
@@ -24,17 +23,6 @@ def get_db() -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
-
-
-def ensure_db():
-    if not os.path.exists(DB_PATH):
-        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-        conn = sqlite3.connect(DB_PATH)
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys=ON")
-        with open(SCHEMA_PATH) as f:
-            conn.executescript(f.read())
-        conn.close()
 
 
 def new_id() -> str:
@@ -264,7 +252,6 @@ async def list_tools() -> list[types.Tool]:
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
-    ensure_db()
     conn = get_db()
     try:
         if name == "get_domains":
@@ -341,7 +328,7 @@ def _create_domain(conn, args) -> list[types.TextContent]:
         "INSERT INTO domains (id, name, location, notes) VALUES (?,?,?,?)",
         (did, args["name"], args.get("location"), args.get("notes")),
     )
-    log_change(conn, "activity", did, "created", None, {"name": args["name"]})
+    log_change(conn, "domain", did, "created", None, {"name": args["name"]})
     conn.commit()
     return ok({"id": did, "name": args["name"], "location": args.get("location")})
 
@@ -632,7 +619,6 @@ def _get_weather_current(conn, location) -> list[types.TextContent]:
 
 
 async def main():
-    ensure_db()
     async with stdio_server() as (read_stream, write_stream):
         await server.run(read_stream, write_stream, server.create_initialization_options())
 

@@ -1,0 +1,105 @@
+{
+  "name": "Zone 7a Fall Garden",
+  "location": "Richmond,VA,US",
+  "notes": "Raised beds 2 and 3. Each bed ~4x8 ft. Amended with compost spring 2026. Drip irrigation installed.",
+  "activities": [
+    {
+      "name": "Start Broccoli Transplants Indoors",
+      "description": "Start broccoli from seed indoors 6-8 weeks before target transplant date. Needs 60-65F soil temp for germination.",
+      "trigger_type": "calendar",
+      "trigger_def": {
+        "type": "calendar",
+        "date": "2027-07-15"
+      },
+      "sort_order": 1,
+      "steps": [
+        { "name": "Buy broccoli seed", "step_type": "prep", "lead_days": 14 },
+        { "name": "Prepare seed starting trays", "step_type": "prep", "lead_days": 1 },
+        { "name": "Thin to strongest seedling per cell", "step_type": "follow_up", "lead_days": 14 },
+        { "name": "Harden off seedlings", "step_type": "follow_up", "lead_days": 35, "description": "Move outdoors for increasing hours over 7 days" }
+      ]
+    },
+    {
+      "name": "Transplant Broccoli to Beds",
+      "description": "Transplant hardened-off broccoli seedlings to bed 2. Space 18 inches apart.",
+      "trigger_type": "dependency",
+      "trigger_def": {
+        "type": "dependency",
+        "activity_ref": "Start Broccoli Transplants Indoors",
+        "event": "completed",
+        "offset_days": 7
+      },
+      "sort_order": 2,
+      "steps": [
+        { "name": "Amend bed with compost", "step_type": "prep", "lead_days": 3 },
+        { "name": "Install row cover supports", "step_type": "prep", "lead_days": 1 },
+        { "name": "Water deeply after transplanting", "step_type": "follow_up", "lead_days": 0 },
+        { "name": "Apply row cover if temps below 40F forecast", "step_type": "follow_up", "lead_days": 1 }
+      ]
+    },
+    {
+      "name": "Direct Sow Lettuce Succession 1",
+      "description": "Direct sow romaine and butterhead lettuce in bed 3. First succession planting.",
+      "trigger_type": "compound",
+      "trigger_def": {
+        "type": "compound",
+        "operator": "AND",
+        "conditions": [
+          { "type": "calendar", "after": "2027-08-15" },
+          {
+            "type": "condition",
+            "all": [
+              { "metric": "daily_high", "operator": "<=", "value": 90, "sustained_days": 3 }
+            ]
+          }
+        ]
+      },
+      "sort_order": 3,
+      "steps": [
+        { "name": "Buy lettuce seed varieties", "step_type": "prep", "lead_days": 14 },
+        { "name": "Prepare bed 3 with compost top-dress", "step_type": "prep", "lead_days": 2 },
+        { "name": "Install shade cloth if temps above 85F", "step_type": "follow_up", "lead_days": 0 },
+        { "name": "Thin seedlings to 6 inch spacing", "step_type": "follow_up", "lead_days": 14 }
+      ]
+    },
+    {
+      "name": "Direct Sow Lettuce Succession 2",
+      "description": "Second lettuce succession 3 weeks after first sowing for continuous harvest.",
+      "trigger_type": "dependency",
+      "trigger_def": {
+        "type": "dependency",
+        "activity_ref": "Direct Sow Lettuce Succession 1",
+        "event": "completed",
+        "offset_days": 21
+      },
+      "sort_order": 4,
+      "steps": [
+        { "name": "Thin seedlings to 6 inch spacing", "step_type": "follow_up", "lead_days": 14 }
+      ]
+    },
+    {
+      "name": "Plant Garlic",
+      "description": "Plant hardneck garlic cloves 2 inches deep, 6 inches apart. Needs several weeks of cold for vernalization.",
+      "trigger_type": "compound",
+      "trigger_def": {
+        "type": "compound",
+        "operator": "AND",
+        "conditions": [
+          { "type": "calendar", "after": "2027-10-15" },
+          {
+            "type": "condition",
+            "all": [
+              { "metric": "daily_high", "operator": "<=", "value": 60, "sustained_days": 3 }
+            ]
+          }
+        ]
+      },
+      "sort_order": 5,
+      "steps": [
+        { "name": "Order seed garlic", "step_type": "prep", "lead_days": 30, "description": "Hardneck varieties: Music, German Extra Hardy" },
+        { "name": "Prepare bed with bone meal", "step_type": "prep", "lead_days": 3 },
+        { "name": "Mulch with 4 inches of straw", "step_type": "follow_up", "lead_days": 1, "description": "Insulate for winter, suppress weeds" }
+      ]
+    }
+  ]
+}

@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS todoist_sync (
 CREATE TABLE IF NOT EXISTS activity_log (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   timestamp       DATETIME DEFAULT CURRENT_TIMESTAMP,
-  item_type       TEXT NOT NULL CHECK(item_type IN ('activity','step','condition')),
+  item_type       TEXT NOT NULL CHECK(item_type IN ('domain','activity','step','condition')),
   item_id         TEXT NOT NULL,
   action          TEXT NOT NULL CHECK(action IN ('status_change','date_cascade','trigger_fire','manual_update','created','observation')),
   old_value       JSON,
