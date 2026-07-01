@@ -46,7 +46,7 @@ Plan-state is a condition-aware activity orchestrator for personal life domains.
 - **Notes**: Working. Needs to be run on Mac Mini with new two-repo layout.
 
 ### Step 6: Domain definition schema
-- **Status**: not started
+- **Status**: complete
 - **What it does**: A JSON schema defining a complete domain definition -- one domain with all its activities, steps, conditions, and triggers in a single document. This is the contract between any LLM (Hermes, Claude, etc.) and the system.
 - **What good looks like**: Schema validates realistic domain definitions (lawn care, garden, hunting). An LLM can produce a conforming document from a planning conversation. Schema catches common errors (missing required fields, invalid trigger types, bad lead_days).
 - **Test**: Write 2-3 example domain definitions (lawn care, garden) and validate them against the schema. Invalid examples should fail validation with clear error messages.
@@ -54,7 +54,7 @@ Plan-state is a condition-aware activity orchestrator for personal life domains.
 - **Notes**: See PRD FR-16.1-16.3 for requirements. Keep the format close to what create_activity already accepts to minimize translation.
 
 ### Step 7: Bulk load MCP tool (load_domain)
-- **Status**: not started
+- **Status**: complete
 - **What it does**: A new MCP tool that accepts a complete domain definition (conforming to the schema from Step 6), validates it, and atomically creates the domain + all activities + all steps + all conditions in one transaction. Returns the created domain with all IDs assigned.
 - **What good looks like**: `load_domain(definition)` creates everything or rolls back on error. Validation errors return structured feedback an LLM can act on (field path, error type, message). Duplicate domain names are rejected.
 - **Test**: Load a valid lawn care definition and verify all rows created. Load an invalid definition and verify rollback (zero rows created) with actionable error.
