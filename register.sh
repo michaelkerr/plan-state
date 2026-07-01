@@ -8,13 +8,15 @@
 #
 # WHEN TO RE-RUN:
 #   - After adding new cron jobs
-#   - After adding new script files (symlinks need to be created)
+#   - After changing scripts/*.py or *.sh (these are thin wrappers copied
+#     into the container; Hermes blocks symlinks outside /opt/data/scripts/)
 #
 # NO RE-RUN NEEDED:
 #   - Editing skills/*.md (loaded via external_dirs, live immediately)
-#   - Editing scripts/*.py or *.sh (symlinked, live immediately)
 #   - Editing mcp-server/server.py, sync/daily_sync.py, schema.sql
 #     (volume-mounted directly, live immediately)
+#   - Editing the code that scripts delegate to (sync/daily_sync.py etc.
+#     is volume-mounted, so changes are live even though the wrapper is copied)
 set -euo pipefail
 
 CONTAINER="${GIDEON_CONTAINER:-gideon-gateway}"
@@ -42,20 +44,23 @@ for skill in plansync.md plansync-briefing.md domain-authoring.md; do
 done
 for script in daily-sync.py briefing-context.py briefing-context.sh; do
     target="/opt/data/scripts/$script"
-    if docker exec "$CONTAINER" test -f "$target" -a ! -L "$target" 2>/dev/null; then
+    if docker exec "$CONTAINER" test -L "$target" 2>/dev/null; then
         docker exec "$CONTAINER" rm "$target"
-        echo "  Removed old script copy: $script"
+        echo "  Removed stale symlink: $script"
     fi
 done
 
-# ── 3. Symlink cron wrapper scripts ─────────────────────────
-echo "[3/6] Symlinking scripts..."
+# ── 3. Copy cron wrapper scripts ────────────────────────────
+# Hermes requires scripts to resolve within /opt/data/scripts/ (no symlinks
+# to external paths). These are thin wrappers that delegate to volume-mounted
+# code, so the actual logic is still live-editable.
+echo "[3/6] Copying scripts..."
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 for script in "$SCRIPT_DIR"/scripts/*.py "$SCRIPT_DIR"/scripts/*.sh; do
     [ -f "$script" ] || continue
     name=$(basename "$script")
-    docker exec "$CONTAINER" ln -sf "/opt/plansync/scripts/$name" "/opt/data/scripts/$name"
-    echo "  $name -> /opt/plansync/scripts/$name"
+    docker exec -i "$CONTAINER" tee "/opt/data/scripts/$name" > /dev/null < "$script"
+    echo "  $name"
 done
 
 # ── 4. Initialize database ──────────────────────────────────
@@ -103,7 +108,7 @@ echo ""
 echo "=== Registration Complete ==="
 echo ""
 echo "Skills:     loaded via external_dirs (live edits)"
-echo "Scripts:    symlinked (live edits)"
+echo "Scripts:    copied (re-run register.sh after edits to wrappers)"
 echo "MCP server: configured in Gideon config.yaml (live edits)"
 echo "Cron jobs:  registered"
 echo ""

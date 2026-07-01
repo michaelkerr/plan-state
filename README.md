@@ -34,14 +34,14 @@ cd ../plan-state
 ./register.sh
 ```
 
-`register.sh` symlinks scripts, initializes the database, installs Python dependencies, and registers cron jobs. The entire repo is volume-mounted into the container at `/opt/plansync/`, so edits to all files are live immediately:
+`register.sh` copies scripts, initializes the database, installs Python dependencies, and registers cron jobs. The entire repo is volume-mounted into the container at `/opt/plansync/`:
 
-- **Skills**: loaded via Hermes `external_dirs` (configured in Gideon's `config.yaml`)
-- **Scripts**: symlinked into `/opt/data/scripts/` by `register.sh`
-- **MCP server**: configured in Gideon's `config.yaml` (`mcp_servers.plansync`)
-- **Sync pipeline, schema, init**: accessed directly via the volume mount
+- **Skills**: loaded via Hermes `external_dirs` (configured in Gideon's `config.yaml`) — live edits
+- **Scripts**: thin wrappers copied into `/opt/data/scripts/` (Hermes requires scripts within this directory). They delegate to volume-mounted code, so the actual logic is live-editable.
+- **MCP server**: configured in Gideon's `config.yaml` (`mcp_servers.plansync`) — live edits
+- **Sync pipeline, schema, init**: accessed directly via the volume mount — live edits
 
-Re-run `register.sh` only after adding new script files or cron jobs.
+Re-run `register.sh` after adding new script files, editing script wrappers, or adding new cron jobs.
 
 ## Verify
 
