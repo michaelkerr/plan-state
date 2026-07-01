@@ -1,6 +1,14 @@
 #!/bin/bash
 # Register plan-state application with a running Gideon instance.
 # Run this after 'docker compose up -d' from the gideon repo.
+#
+# WHEN TO RE-RUN:
+#   - After changing skills/*.md or scripts/*.py (these are copied to gideon/data/)
+#   - After adding new MCP tools or cron jobs
+#
+# NO RE-RUN NEEDED:
+#   - Editing mcp-server/server.py, sync/daily_sync.py, schema.sql
+#     (volume-mounted directly, changes are live immediately)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -53,7 +61,7 @@ docker exec "$CONTAINER" python3 -c "import requests; import todoist_api_python"
 
 # ── 7. Register MCP server ──────────────────────────────────
 echo "[7/8] Registering plansync MCP server..."
-docker exec "$CONTAINER" hermes mcp add plansync \
+yes | docker exec -i "$CONTAINER" hermes mcp add plansync \
     --command python3 \
     --args "/opt/plansync/mcp-server/server.py" \
     --env PLANSYNC_DB=/opt/plansync/plansync.db \
