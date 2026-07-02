@@ -250,6 +250,23 @@ async def list_tools() -> list[types.Tool]:
             },
         ),
         types.Tool(
+            name="add_activities",
+            description="Add one or more activities (with steps and conditions) to an EXISTING domain. Same activity format as load_domain. Atomic: all created or none. Dependency activity_ref names resolve against both the new batch and activities already in the domain.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "domain_id": {"type": "string"},
+                    "activities": {
+                        "type": "array",
+                        "minItems": 1,
+                        "description": "Activity definitions conforming to the activity schema in domain_schema.json",
+                        "items": {"type": "object"},
+                    },
+                },
+                "required": ["domain_id", "activities"],
+            },
+        ),
+        types.Tool(
             name="load_domain",
             description="Bulk-load a complete domain definition (domain + all activities, steps, conditions) in one atomic operation. Validates the definition, resolves activity_ref dependencies by name, and rolls back on any error.",
             inputSchema={
@@ -292,6 +309,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             return _get_weather_current(conn, arguments["location"])
         elif name == "load_domain":
             return _load_domain(conn, arguments)
+        elif name == "add_activities":
+            return _add_activities(conn, arguments)
         else:
             return ok({"error": f"Unknown tool: {name}"})
     finally:
@@ -382,63 +401,7 @@ def _load_domain(conn, args) -> list[types.TextContent]:
 
         for i, act_def in enumerate(defn["activities"]):
             aid = name_to_id[act_def["name"]]
-            trigger_def = _resolve_refs(act_def["trigger_def"], name_to_id)
-            if isinstance(trigger_def, dict) and trigger_def.get("_error"):
-                raise ValueError(trigger_def["_error"])
-
-            trigger_def_str = json.dumps(trigger_def)
-            trigger_date = compute_trigger_date(trigger_def)
-
-            conn.execute(
-                """INSERT INTO activities (id, domain_id, name, description, group_name, trigger_type, trigger_def, trigger_date, recurrence, sort_order)
-                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                (
-                    aid, did, act_def["name"], act_def.get("description"), act_def.get("group_name"),
-                    act_def["trigger_type"], trigger_def_str, trigger_date,
-                    json.dumps(act_def["recurrence"]) if act_def.get("recurrence") else None,
-                    act_def.get("sort_order", i),
-                ),
-            )
-            log_change(conn, "activity", aid, "created", None, {"name": act_def["name"], "trigger_type": act_def["trigger_type"]})
-
-            created_steps = []
-            for j, step_def in enumerate(act_def.get("steps", [])):
-                sid = new_id()
-                due = None
-                if trigger_date:
-                    td = date.fromisoformat(trigger_date)
-                    if step_def["step_type"] == "prep":
-                        due = (td - timedelta(days=step_def["lead_days"])).isoformat()
-                    else:
-                        due = (td + timedelta(days=step_def["lead_days"])).isoformat()
-                conn.execute(
-                    """INSERT INTO steps (id, activity_id, name, description, step_type, lead_days, due_date, condition, sort_order)
-                       VALUES (?,?,?,?,?,?,?,?,?)""",
-                    (
-                        sid, aid, step_def["name"], step_def.get("description"),
-                        step_def["step_type"], step_def["lead_days"], due,
-                        json.dumps(step_def["condition"]) if step_def.get("condition") else None,
-                        j,
-                    ),
-                )
-                created_steps.append({"id": sid, "name": step_def["name"], "due_date": due})
-
-            for cond_def in act_def.get("conditions", []):
-                cid = new_id()
-                conn.execute(
-                    "INSERT INTO conditions (id, activity_id, condition_type, definition) VALUES (?,?,?,?)",
-                    (cid, aid, cond_def["condition_type"], json.dumps(cond_def["definition"])),
-                )
-
-            activity_results.append({
-                "id": aid,
-                "name": act_def["name"],
-                "group_name": act_def.get("group_name"),
-                "trigger_type": act_def["trigger_type"],
-                "trigger_date": trigger_date,
-                "status": "watching",
-                "steps": created_steps,
-            })
+            activity_results.append(_insert_activity(conn, did, aid, act_def, name_to_id, default_sort=i))
 
         conn.commit()
         return ok({
@@ -448,6 +411,108 @@ def _load_domain(conn, args) -> list[types.TextContent]:
             "activities": activity_results,
         })
 
+    except (ValueError, sqlite3.Error) as e:
+        conn.rollback()
+        return ok({"error": str(e)})
+
+
+def _insert_activity(conn, domain_id, aid, act_def, name_to_id, default_sort):
+    """Insert one activity with its steps and conditions. Raises ValueError on
+    unresolvable dependency refs; caller owns the transaction."""
+    trigger_def = _resolve_refs(act_def["trigger_def"], name_to_id)
+    if isinstance(trigger_def, dict) and trigger_def.get("_error"):
+        raise ValueError(trigger_def["_error"])
+
+    trigger_def_str = json.dumps(trigger_def)
+    trigger_date = compute_trigger_date(trigger_def)
+
+    conn.execute(
+        """INSERT INTO activities (id, domain_id, name, description, group_name, trigger_type, trigger_def, trigger_date, recurrence, sort_order)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        (
+            aid, domain_id, act_def["name"], act_def.get("description"), act_def.get("group_name"),
+            act_def["trigger_type"], trigger_def_str, trigger_date,
+            json.dumps(act_def["recurrence"]) if act_def.get("recurrence") else None,
+            act_def.get("sort_order", default_sort),
+        ),
+    )
+    log_change(conn, "activity", aid, "created", None, {"name": act_def["name"], "trigger_type": act_def["trigger_type"]})
+
+    created_steps = []
+    for j, step_def in enumerate(act_def.get("steps", [])):
+        sid = new_id()
+        due = None
+        if trigger_date:
+            td = date.fromisoformat(trigger_date)
+            if step_def["step_type"] == "prep":
+                due = (td - timedelta(days=step_def["lead_days"])).isoformat()
+            else:
+                due = (td + timedelta(days=step_def["lead_days"])).isoformat()
+        conn.execute(
+            """INSERT INTO steps (id, activity_id, name, description, step_type, lead_days, due_date, condition, sort_order)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (
+                sid, aid, step_def["name"], step_def.get("description"),
+                step_def["step_type"], step_def["lead_days"], due,
+                json.dumps(step_def["condition"]) if step_def.get("condition") else None,
+                j,
+            ),
+        )
+        created_steps.append({"id": sid, "name": step_def["name"], "due_date": due})
+
+    for cond_def in act_def.get("conditions", []):
+        cid = new_id()
+        conn.execute(
+            "INSERT INTO conditions (id, activity_id, condition_type, definition) VALUES (?,?,?,?)",
+            (cid, aid, cond_def["condition_type"], json.dumps(cond_def["definition"])),
+        )
+
+    return {
+        "id": aid,
+        "name": act_def["name"],
+        "group_name": act_def.get("group_name"),
+        "trigger_type": act_def["trigger_type"],
+        "trigger_date": trigger_date,
+        "status": "watching",
+        "steps": created_steps,
+    }
+
+
+def _add_activities(conn, args) -> list[types.TextContent]:
+    domain_id = args.get("domain_id")
+    activities = args.get("activities")
+
+    domain = conn.execute("SELECT * FROM domains WHERE id=?", (domain_id,)).fetchone()
+    if not domain:
+        return ok({"error": f"Domain {domain_id} not found"})
+    if not isinstance(activities, list) or len(activities) == 0:
+        return ok({"error": "activities must be a non-empty array"})
+
+    existing = conn.execute(
+        "SELECT id, name, sort_order FROM activities WHERE domain_id=?", (domain_id,)
+    ).fetchall()
+    existing_names = {r["name"] for r in existing}
+
+    errors = _validate_activities(activities, [], existing_names)
+    if errors:
+        return ok({"error": "Validation failed", "details": errors})
+
+    name_to_id = {r["name"]: r["id"] for r in existing}
+    for act_def in activities:
+        name_to_id[act_def["name"]] = new_id()
+    max_sort = max((r["sort_order"] or 0 for r in existing), default=0)
+
+    try:
+        results = []
+        for i, act_def in enumerate(activities):
+            aid = name_to_id[act_def["name"]]
+            results.append(_insert_activity(conn, domain_id, aid, act_def, name_to_id, default_sort=max_sort + i + 1))
+        conn.commit()
+        return ok({
+            "domain_id": domain_id,
+            "domain_name": domain["name"],
+            "activities": results,
+        })
     except (ValueError, sqlite3.Error) as e:
         conn.rollback()
         return ok({"error": str(e)})
@@ -464,42 +529,53 @@ def _validate_domain_definition(defn):
     elif not isinstance(defn["activities"], list) or len(defn["activities"]) == 0:
         errors.append({"path": "activities", "error": "Must be a non-empty array"})
     else:
-        valid_trigger_types = {"calendar", "condition", "dependency", "compound"}
-        valid_step_types = {"prep", "follow_up"}
-        activity_names = set()
-        for i, act in enumerate(defn["activities"]):
-            prefix = f"activities[{i}]"
-            if not isinstance(act, dict):
-                errors.append({"path": prefix, "error": "Must be an object"})
-                continue
-            if "name" not in act:
-                errors.append({"path": f"{prefix}.name", "error": "Required field missing"})
-            elif act["name"] in activity_names:
-                errors.append({"path": f"{prefix}.name", "error": f"Duplicate activity name: {act['name']}"})
-            else:
-                activity_names.add(act["name"])
-            if "trigger_type" not in act:
-                errors.append({"path": f"{prefix}.trigger_type", "error": "Required field missing"})
-            elif act["trigger_type"] not in valid_trigger_types:
-                errors.append({"path": f"{prefix}.trigger_type", "error": f"Invalid trigger type: {act['trigger_type']}"})
-            if "trigger_def" not in act:
-                errors.append({"path": f"{prefix}.trigger_def", "error": "Required field missing"})
-            for j, step in enumerate(act.get("steps", [])):
-                sp = f"{prefix}.steps[{j}]"
-                if "name" not in step:
-                    errors.append({"path": f"{sp}.name", "error": "Required field missing"})
-                if "step_type" not in step:
-                    errors.append({"path": f"{sp}.step_type", "error": "Required field missing"})
-                elif step["step_type"] not in valid_step_types:
-                    errors.append({"path": f"{sp}.step_type", "error": f"Invalid step type: {step['step_type']}"})
-                if "lead_days" not in step:
-                    errors.append({"path": f"{sp}.lead_days", "error": "Required field missing"})
-                elif not isinstance(step["lead_days"], int) or step["lead_days"] < 0:
-                    errors.append({"path": f"{sp}.lead_days", "error": "Must be a non-negative integer"})
+        _validate_activities(defn["activities"], errors)
 
-        for i, act in enumerate(defn["activities"]):
+    return errors
+
+
+def _validate_activities(activities, errors, existing_names=frozenset()):
+    """Validate a batch of activity definitions. existing_names are activities
+    already in the domain: duplicates against them are rejected, but dependency
+    refs may resolve to them."""
+    valid_trigger_types = {"calendar", "condition", "dependency", "compound"}
+    valid_step_types = {"prep", "follow_up"}
+    batch_names = set()
+    for i, act in enumerate(activities):
+        prefix = f"activities[{i}]"
+        if not isinstance(act, dict):
+            errors.append({"path": prefix, "error": "Must be an object"})
+            continue
+        if "name" not in act:
+            errors.append({"path": f"{prefix}.name", "error": "Required field missing"})
+        elif act["name"] in batch_names or act["name"] in existing_names:
+            errors.append({"path": f"{prefix}.name", "error": f"Duplicate activity name: {act['name']}"})
+        else:
+            batch_names.add(act["name"])
+        if "trigger_type" not in act:
+            errors.append({"path": f"{prefix}.trigger_type", "error": "Required field missing"})
+        elif act["trigger_type"] not in valid_trigger_types:
+            errors.append({"path": f"{prefix}.trigger_type", "error": f"Invalid trigger type: {act['trigger_type']}"})
+        if "trigger_def" not in act:
+            errors.append({"path": f"{prefix}.trigger_def", "error": "Required field missing"})
+        for j, step in enumerate(act.get("steps", [])):
+            sp = f"{prefix}.steps[{j}]"
+            if "name" not in step:
+                errors.append({"path": f"{sp}.name", "error": "Required field missing"})
+            if "step_type" not in step:
+                errors.append({"path": f"{sp}.step_type", "error": "Required field missing"})
+            elif step["step_type"] not in valid_step_types:
+                errors.append({"path": f"{sp}.step_type", "error": f"Invalid step type: {step['step_type']}"})
+            if "lead_days" not in step:
+                errors.append({"path": f"{sp}.lead_days", "error": "Required field missing"})
+            elif not isinstance(step["lead_days"], int) or step["lead_days"] < 0:
+                errors.append({"path": f"{sp}.lead_days", "error": "Must be a non-negative integer"})
+
+    ref_names = batch_names | set(existing_names)
+    for i, act in enumerate(activities):
+        if isinstance(act, dict):
             tdef = act.get("trigger_def", {})
-            _validate_dependency_refs(tdef, activity_names, f"activities[{i}].trigger_def", errors)
+            _validate_dependency_refs(tdef, ref_names, f"activities[{i}].trigger_def", errors)
 
     return errors
 
@@ -522,7 +598,7 @@ def _resolve_refs(tdef, name_to_id):
     if result.get("type") == "dependency" and "activity_ref" in result:
         ref_name = result.pop("activity_ref")
         if ref_name not in name_to_id:
-            return {"_error": f"Cannot resolve activity_ref '{ref_name}': not found in this domain definition"}
+            return {"_error": f"Cannot resolve activity_ref '{ref_name}': no activity with that name in this domain"}
         result["activity_id"] = name_to_id[ref_name]
     if result.get("type") == "compound" and "conditions" in result:
         resolved_subs = []

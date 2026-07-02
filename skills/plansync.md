@@ -14,6 +14,7 @@ conditions, prep steps, and Todoist sync state.
 - defer_activity(...) -- push dates, re-cascade
 - create_domain(...) -- new domain (single domain, no activities)
 - load_domain(definition) -- bulk-load a complete domain with all activities, steps, conditions in one call
+- add_activities(domain_id, activities) -- add activities to an existing domain; activity_ref can reference activities already in the domain
 - add_observation(...) -- record field observation
 - get_upcoming(days_ahead) -- cross-domain upcoming view
 - get_weather_current(location) -- latest weather + forecast
@@ -76,5 +77,7 @@ Combine calendar and condition triggers.
   than trying to reconstruct the schedule from memory.
 - Use update_activity to modify existing activities. Do not delete
   and recreate.
+- To grow an existing domain, use add_activities -- do not create a
+  new domain for activities that belong to an existing one.
 - When deferring, always include a reason so the activity log
   captures why the date moved.

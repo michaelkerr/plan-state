@@ -102,12 +102,12 @@ Plan-state is a condition-aware activity orchestrator for personal life domains.
 - **Notes**: Rationale: the bundling layer between domain and activity (plant type, species, bed) is not one fixed taxonomy, so it's a free-form field rather than a table. Domain = one location/weather context; dependency chains + group_name handle bundling within it. Built 2026-07-02: column named `group_name` (not `group` -- SQL keyword). Todoist tasks are prefixed "Group: Task" via task_content() in daily_sync.py; steps inherit the group from their parent activity. Local plansync.db (empty, gitignored) was deleted and re-initialized from the updated schema. Mac Mini DB re-init happens at Step 9 deploy. Regression tests in tests/test_group_name.py (10 tests); the Todoist naming test skips locally without `requests` installed.
 
 ### Step 13: Amend-domain MCP tool (add_activities)
-- **Status**: not started
+- **Status**: complete
 - **What it does**: A new MCP tool that adds one or more activities (with steps and conditions) to an existing domain, using the same activity-definition format as load_domain. Validates like load_domain, atomic (all-or-nothing), and resolves dependency `activity_ref` names against BOTH the incoming batch and activities already in the domain -- so a new "Transplant Tomatoes" can depend on an existing "Start Tomato Seeds".
 - **What good looks like**: `add_activities(domain_id, activities=[...])` creates everything or rolls back with structured errors. Duplicate activity names within the domain are rejected. New activities start in "watching" status and are picked up by the next cron run with no special handling.
 - **Test**: Load a domain, then add an activity whose dependency trigger references a pre-existing activity by name; verify resolution to the correct ID. Add an invalid batch; verify rollback (zero new rows) and actionable errors.
 - **Builds on**: Steps 7, 12
-- **Notes**: load_domain stays create-only. Existing update_activity/complete_activity/defer_activity already cover editing; this fills the "grow an existing domain" gap.
+- **Notes**: load_domain stays create-only. Existing update_activity/complete_activity/defer_activity already cover editing; this fills the "grow an existing domain" gap. Built 2026-07-02: activity insert logic extracted into shared _insert_activity() used by both load_domain and add_activities; validation generalized via _validate_activities(existing_names). sort_order for new activities continues after the domain's current max. Regression tests in tests/test_add_activities.py (14 tests). Building this surfaced the pending_create gap fixed in Step 15.
 
 ### Step 14: Domain authoring skill v2 (create + amend)
 - **Status**: not started
@@ -116,3 +116,11 @@ Plan-state is a condition-aware activity orchestrator for personal life domains.
 - **Test**: manual -- run one create conversation and one amend conversation; verify the amend path calls get_domain_plan first and produces a valid add_activities payload referencing an existing activity
 - **Builds on**: Steps 8, 12, 13
 - **Notes**: Single skill file for both modes so the trigger-format reference isn't duplicated.
+
+### Step 15: Todoist enqueue reconciliation
+- **Status**: not started
+- **What it does**: Fixes a v1 gap: nothing ever writes `pending_create` rows to todoist_sync, so no task would ever be created in Todoist. Adds a reconciliation pass in daily_sync.py just before the Todoist step: enqueue pending_create for (a) any activity in status preparing/active with no todoist_sync row, and (b) any pending/due step with a due_date whose parent activity is preparing/active and which has no todoist_sync row. Idempotent -- catches status changes from any source (cron trigger fire, Hermes tools, Todoist completion polling).
+- **What good looks like**: After a trigger fires, the next sync run creates Todoist tasks for the activity and its steps. Running the sync twice does not enqueue duplicates. Completed/skipped items are never enqueued.
+- **Test**: Seed a DB with a preparing activity + steps, run the reconciliation function, verify pending_create rows exist and are correct; run again, verify no duplicates; verify watching/completed activities and completed steps are not enqueued.
+- **Builds on**: Step 3
+- **Notes**: Found while building Step 13. Reconciliation in the cron (rather than enqueue calls at every status-change site) fits the deterministic-pipeline design and self-heals missed enqueues. Must land before Step 9, whose verification requires tasks appearing in Todoist.
