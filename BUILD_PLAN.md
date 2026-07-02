@@ -118,9 +118,9 @@ Plan-state is a condition-aware activity orchestrator for personal life domains.
 - **Notes**: Single skill file for both modes so the trigger-format reference isn't duplicated.
 
 ### Step 15: Todoist enqueue reconciliation
-- **Status**: not started
+- **Status**: complete
 - **What it does**: Fixes a v1 gap: nothing ever writes `pending_create` rows to todoist_sync, so no task would ever be created in Todoist. Adds a reconciliation pass in daily_sync.py just before the Todoist step: enqueue pending_create for (a) any activity in status preparing/active with no todoist_sync row, and (b) any pending/due step with a due_date whose parent activity is preparing/active and which has no todoist_sync row. Idempotent -- catches status changes from any source (cron trigger fire, Hermes tools, Todoist completion polling).
 - **What good looks like**: After a trigger fires, the next sync run creates Todoist tasks for the activity and its steps. Running the sync twice does not enqueue duplicates. Completed/skipped items are never enqueued.
 - **Test**: Seed a DB with a preparing activity + steps, run the reconciliation function, verify pending_create rows exist and are correct; run again, verify no duplicates; verify watching/completed activities and completed steps are not enqueued.
 - **Builds on**: Step 3
-- **Notes**: Found while building Step 13. Reconciliation in the cron (rather than enqueue calls at every status-change site) fits the deterministic-pipeline design and self-heals missed enqueues. Must land before Step 9, whose verification requires tasks appearing in Todoist.
+- **Notes**: Found while building Step 13. Reconciliation in the cron (rather than enqueue calls at every status-change site) fits the deterministic-pipeline design and self-heals missed enqueues. Must land before Step 9, whose verification requires tasks appearing in Todoist. Built 2026-07-02: enqueue_todoist_items() runs as its own pipeline step before todoist_sync, so the queue fills even when TODOIST_API_KEY is unset. Also made the `requests` import guarded so sync code is importable in test environments without network deps. Tests in tests/test_todoist_enqueue.py (6 tests).

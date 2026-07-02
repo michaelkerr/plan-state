@@ -192,7 +192,6 @@ class TestBriefingContext:
 
 class TestTodoistNaming:
     def test_task_content_prefixes_group(self):
-        pytest.importorskip("requests")
         import daily_sync
         assert daily_sync.task_content("Tomatoes", "Transplant Tomatoes") == "Tomatoes: Transplant Tomatoes"
         assert daily_sync.task_content(None, "Plant Garlic") == "Plant Garlic"

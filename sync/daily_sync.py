@@ -10,7 +10,10 @@ import sqlite3
 import sys
 from datetime import date, datetime, timedelta, timezone
 
-import requests
+try:
+    import requests
+except ImportError:  # absent in test/tooling environments; required in the container
+    requests = None
 
 DB_PATH = os.environ.get("PLANSYNC_DB", "/opt/plansync/plansync.db")
 OWM_KEY = os.environ.get("OPENWEATHERMAP_API_KEY", "")
@@ -93,6 +96,9 @@ def log_change(conn, item_type, item_id, action, old_value, new_value):
 def pull_weather(conn, summary):
     if not OWM_KEY:
         summary.errors.append("OPENWEATHERMAP_API_KEY not set, skipping weather pull")
+        return
+    if requests is None:
+        summary.errors.append("requests not installed, skipping weather pull")
         return
 
     locations = conn.execute("SELECT DISTINCT location FROM domains WHERE location IS NOT NULL").fetchall()
@@ -445,9 +451,39 @@ def task_content(group_name, item_name):
     return f"{group_name}: {item_name}" if group_name else item_name
 
 
+def enqueue_todoist_items(conn):
+    """Reconciliation pass: queue Todoist task creation for anything actionable
+    that has no sync row yet. Idempotent; runs regardless of API availability so
+    the queue is ready when sync happens. Nothing else writes pending_create."""
+    conn.execute(
+        """INSERT INTO todoist_sync (plan_item_id, plan_item_type, sync_status)
+           SELECT a.id, 'activity', 'pending_create'
+           FROM activities a
+           WHERE a.status IN ('preparing','active')
+             AND NOT EXISTS (
+               SELECT 1 FROM todoist_sync ts
+               WHERE ts.plan_item_id = a.id AND ts.plan_item_type = 'activity')"""
+    )
+    conn.execute(
+        """INSERT INTO todoist_sync (plan_item_id, plan_item_type, sync_status)
+           SELECT s.id, 'step', 'pending_create'
+           FROM steps s
+           JOIN activities a ON s.activity_id = a.id
+           WHERE a.status IN ('preparing','active')
+             AND s.status IN ('pending','due')
+             AND s.due_date IS NOT NULL
+             AND NOT EXISTS (
+               SELECT 1 FROM todoist_sync ts
+               WHERE ts.plan_item_id = s.id AND ts.plan_item_type = 'step')"""
+    )
+
+
 def todoist_sync(conn, summary):
     if not TODOIST_KEY:
         summary.errors.append("TODOIST_API_KEY not set, skipping Todoist sync")
+        return
+    if requests is None:
+        summary.errors.append("requests not installed, skipping Todoist sync")
         return
 
     headers = {"Authorization": f"Bearer {TODOIST_KEY}", "Content-Type": "application/json"}
@@ -636,6 +672,9 @@ def main():
         conn.commit()
 
         check_overdue(conn, summary)
+        conn.commit()
+
+        enqueue_todoist_items(conn)
         conn.commit()
 
         todoist_sync(conn, summary)
