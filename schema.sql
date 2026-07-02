@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS activities (
   domain_id       TEXT NOT NULL REFERENCES domains(id),
   name            TEXT NOT NULL,
   description     TEXT,
+  group_name      TEXT,
   status          TEXT DEFAULT 'watching'
                     CHECK(status IN ('watching','preparing','active','completed','skipped','deferred')),
   trigger_type    TEXT CHECK(trigger_type IN ('calendar','condition','dependency','compound')),

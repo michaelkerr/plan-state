@@ -24,6 +24,10 @@ conditions, prep steps, and Todoist sync state.
    Read current state first.
 2. When creating activities, include all prep and follow-up steps
    with realistic lead_days.
+   Set group_name to bundle related activities within a domain
+   (crop, bed, species -- e.g. all three tomato activities get
+   group_name "Tomatoes"). It is display-only; trigger logic
+   comes from dependencies, not groups.
 3. For condition-based triggers, be specific about metrics,
    thresholds, and sustained_days requirements.
 4. After modifications, call get_upcoming() to show the user

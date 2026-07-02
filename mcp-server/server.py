@@ -135,6 +135,7 @@ async def list_tools() -> list[types.Tool]:
                     "domain_id": {"type": "string"},
                     "name": {"type": "string"},
                     "description": {"type": "string"},
+                    "group_name": {"type": "string", "description": "Optional bundle label within the domain (crop, bed, species). Display only."},
                     "trigger_type": {"type": "string", "enum": ["calendar", "condition", "dependency", "compound"]},
                     "trigger_def": {"type": "object", "description": "Structured trigger definition"},
                     "recurrence": {"type": "object", "description": "Recurrence rule, if cyclical"},
@@ -176,6 +177,7 @@ async def list_tools() -> list[types.Tool]:
                     "activity_id": {"type": "string"},
                     "name": {"type": "string"},
                     "description": {"type": "string"},
+                    "group_name": {"type": "string", "description": "Optional bundle label within the domain (crop, bed, species). Display only."},
                     "status": {"type": "string", "enum": ["watching", "preparing", "active", "completed", "skipped", "deferred"]},
                     "trigger_type": {"type": "string"},
                     "trigger_def": {"type": "object"},
@@ -388,10 +390,10 @@ def _load_domain(conn, args) -> list[types.TextContent]:
             trigger_date = compute_trigger_date(trigger_def)
 
             conn.execute(
-                """INSERT INTO activities (id, domain_id, name, description, trigger_type, trigger_def, trigger_date, recurrence, sort_order)
-                   VALUES (?,?,?,?,?,?,?,?,?)""",
+                """INSERT INTO activities (id, domain_id, name, description, group_name, trigger_type, trigger_def, trigger_date, recurrence, sort_order)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
                 (
-                    aid, did, act_def["name"], act_def.get("description"),
+                    aid, did, act_def["name"], act_def.get("description"), act_def.get("group_name"),
                     act_def["trigger_type"], trigger_def_str, trigger_date,
                     json.dumps(act_def["recurrence"]) if act_def.get("recurrence") else None,
                     act_def.get("sort_order", i),
@@ -431,6 +433,7 @@ def _load_domain(conn, args) -> list[types.TextContent]:
             activity_results.append({
                 "id": aid,
                 "name": act_def["name"],
+                "group_name": act_def.get("group_name"),
                 "trigger_type": act_def["trigger_type"],
                 "trigger_date": trigger_date,
                 "status": "watching",
@@ -539,13 +542,14 @@ def _create_activity(conn, args) -> list[types.TextContent]:
     trigger_date = compute_trigger_date(trigger_def)
 
     conn.execute(
-        """INSERT INTO activities (id, domain_id, name, description, trigger_type, trigger_def, trigger_date, recurrence, sort_order)
-           VALUES (?,?,?,?,?,?,?,?,?)""",
+        """INSERT INTO activities (id, domain_id, name, description, group_name, trigger_type, trigger_def, trigger_date, recurrence, sort_order)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
         (
             aid,
             args["domain_id"],
             args["name"],
             args.get("description"),
+            args.get("group_name"),
             args["trigger_type"],
             trigger_def_str,
             trigger_date,
@@ -601,7 +605,7 @@ def _update_activity(conn, args) -> list[types.TextContent]:
         return ok({"error": f"Activity {aid} not found"})
     current = row_to_dict(current)
 
-    updatable = ["name", "description", "status", "trigger_type", "trigger_def", "trigger_date", "recurrence"]
+    updatable = ["name", "description", "group_name", "status", "trigger_type", "trigger_def", "trigger_date", "recurrence"]
     sets, vals, changes = [], [], {}
     for field in updatable:
         if field in args and args[field] is not None:

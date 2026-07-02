@@ -74,8 +74,8 @@ Plan-state is a condition-aware activity orchestrator for personal life domains.
 - **What it does**: Deploy the two-repo layout on Mac Mini, run register.sh, then use the authoring skill to create the first real domain (user's choice of lawn care, garden, or hunting).
 - **What good looks like**: Domain exists in DB, activities are in "watching" status, next morning's cron run pulls weather and evaluates conditions, Todoist shows tasks for any triggered activities.
 - **Test**: manual -- verify cron output JSON has real data, Todoist shows domain project with tasks
-- **Builds on**: Steps 5-8
-- **Notes**: This is the first end-to-end validation with real data.
+- **Builds on**: Steps 5-8, 12-14
+- **Notes**: This is the first end-to-end validation with real data. Do Steps 12-14 first so the schema is final before real data exists (no migration needed on an empty DB).
 
 ### Step 10: Load additional domains
 - **Status**: not started
@@ -92,3 +92,27 @@ Plan-state is a condition-aware activity orchestrator for personal life domains.
 - **Test**: Create a domain via MCP, verify activity_log row has item_type="domain". Verify only one path creates the DB.
 - **Builds on**: Step 2
 - **Notes**: Fixed. Removed `ensure_db()` from server.py (DB must be created by `init-db.py` or `register.sh`). Fixed `_create_domain` log_change to use item_type="domain".
+
+### Step 12: Activity grouping
+- **Status**: complete
+- **What it does**: Adds a free-form `group_name` TEXT column to activities for within-domain bundling (crop name, garden bed, food plot, etc.). Carries no trigger logic -- display and organization only. Supported in the domain definition schema, load_domain, create_activity, update_activity, get_domain_plan, and get_upcoming. briefing-context.py groups activities by it. Todoist sync uses it in task naming or as a section so bundles read together.
+- **What good looks like**: A garden domain can have "Start Tomato Seeds", "Transplant Tomatoes", and "Tomato Harvest Watch" all under group "Tomatoes"; get_upcoming and the morning briefing present them as one bundle. Activities without a group behave exactly as today.
+- **Test**: Load a domain definition with grouped and ungrouped activities; verify group_name persists, get_domain_plan and get_upcoming return it, and briefing context output groups by it.
+- **Builds on**: Steps 6, 7
+- **Notes**: Rationale: the bundling layer between domain and activity (plant type, species, bed) is not one fixed taxonomy, so it's a free-form field rather than a table. Domain = one location/weather context; dependency chains + group_name handle bundling within it. Built 2026-07-02: column named `group_name` (not `group` -- SQL keyword). Todoist tasks are prefixed "Group: Task" via task_content() in daily_sync.py; steps inherit the group from their parent activity. Local plansync.db (empty, gitignored) was deleted and re-initialized from the updated schema. Mac Mini DB re-init happens at Step 9 deploy. Regression tests in tests/test_group_name.py (10 tests); the Todoist naming test skips locally without `requests` installed.
+
+### Step 13: Amend-domain MCP tool (add_activities)
+- **Status**: not started
+- **What it does**: A new MCP tool that adds one or more activities (with steps and conditions) to an existing domain, using the same activity-definition format as load_domain. Validates like load_domain, atomic (all-or-nothing), and resolves dependency `activity_ref` names against BOTH the incoming batch and activities already in the domain -- so a new "Transplant Tomatoes" can depend on an existing "Start Tomato Seeds".
+- **What good looks like**: `add_activities(domain_id, activities=[...])` creates everything or rolls back with structured errors. Duplicate activity names within the domain are rejected. New activities start in "watching" status and are picked up by the next cron run with no special handling.
+- **Test**: Load a domain, then add an activity whose dependency trigger references a pre-existing activity by name; verify resolution to the correct ID. Add an invalid batch; verify rollback (zero new rows) and actionable errors.
+- **Builds on**: Steps 7, 12
+- **Notes**: load_domain stays create-only. Existing update_activity/complete_activity/defer_activity already cover editing; this fills the "grow an existing domain" gap.
+
+### Step 14: Domain authoring skill v2 (create + amend)
+- **Status**: not started
+- **What it does**: Updates skills/domain-authoring.md to manage domains over their lifetime, not just create them. Adds: (1) amend mode -- when the user names an existing domain, fetch it with get_domain_plan, run the same probing for just the new activities, call add_activities; (2) domain-scoping guidance -- a domain is one location/weather context and a coherent plan (Garden, Yard, TN Hunting Prop 1), not a broad life category; (3) the activity-vs-step rule -- if it needs its own trigger (date, weather, or "after X completes") it's an activity, if it's a fixed-offset chore around a triggered event it's a step; (4) group_name guidance with a multi-phase crop example (tomatoes as a 3-activity dependency chain under one group).
+- **What good looks like**: "Add tomatoes to my garden" produces grouped, dependency-chained activities added to the existing Garden domain via add_activities. "Help me plan my garden" still produces a fresh load_domain call. The skill picks the right mode without being told.
+- **Test**: manual -- run one create conversation and one amend conversation; verify the amend path calls get_domain_plan first and produces a valid add_activities payload referencing an existing activity
+- **Builds on**: Steps 8, 12, 13
+- **Notes**: Single skill file for both modes so the trigger-format reference isn't duplicated.

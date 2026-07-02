@@ -8,7 +8,7 @@ import json
 import os
 import sqlite3
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import requests
 
@@ -18,7 +18,8 @@ TODOIST_KEY = os.environ.get("TODOIST_API_KEY", "")
 OUTPUT_DIR = os.environ.get("PLANSYNC_OUTPUT_DIR", "/opt/plansync/sync-output")
 
 TODAY = date.today()
-NOW = datetime.utcnow()
+# Naive UTC, matching the format utcnow() produced (nothing reads these back)
+NOW = datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class SyncSummary:
@@ -51,8 +52,10 @@ class SyncSummary:
         }
 
     def to_stdout(self):
+        # Always emit something: cron output is delivered to Telegram, and an
+        # empty quiet day should still produce a heartbeat message.
         if self.is_empty():
-            return ""
+            return f"Plan sync {TODAY.isoformat()}: ran clean, no changes."
         lines = ["---"]
         lines.append(f"triggers_fired: {len(self.triggers_fired)}")
         for t in self.triggers_fired:
@@ -438,6 +441,10 @@ def check_overdue(conn, summary):
 TODOIST_API = "https://api.todoist.com/rest/v2"
 
 
+def task_content(group_name, item_name):
+    return f"{group_name}: {item_name}" if group_name else item_name
+
+
 def todoist_sync(conn, summary):
     if not TODOIST_KEY:
         summary.errors.append("TODOIST_API_KEY not set, skipping Todoist sync")
@@ -470,6 +477,7 @@ def _todoist_create(conn, headers, summary):
         """SELECT ts.*, COALESCE(a.name, s.name) as item_name,
                   COALESCE(a.description, s.description) as item_desc,
                   COALESCE(a.trigger_date, s.due_date) as item_due,
+                  COALESCE(a.group_name, (SELECT group_name FROM activities WHERE id = s.activity_id)) as group_name,
                   d.name as domain_name
            FROM todoist_sync ts
            LEFT JOIN activities a ON ts.plan_item_id = a.id AND ts.plan_item_type = 'activity'
@@ -487,7 +495,7 @@ def _todoist_create(conn, headers, summary):
         try:
             project_id = _get_or_create_project(headers, project_name)
             task_data = {
-                "content": item["item_name"],
+                "content": task_content(item["group_name"], item["item_name"]),
                 "description": item["item_desc"] or "",
                 "due_date": due,
                 "project_id": project_id,

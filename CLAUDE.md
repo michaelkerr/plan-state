@@ -71,6 +71,8 @@ plan-state/
 - The cron pipeline for the initial implementation is deterministic (zero LLM tokens). LLM reasoning happens only in Hermes sessions and the morning briefing
 - Step dates cascade automatically from activity trigger dates (prep = trigger - lead_days, follow_up = trigger + lead_days)
 - Activity log captures all state changes with source attribution (`cron`, `hermes`, `todoist_webhook`)
+- Activities carry an optional free-form `group_name` for within-domain bundling (crop, bed, species). Display/organization only -- trigger logic comes from dependency chains, never groups. Todoist task names are prefixed "Group: Task"
+- A domain = one location/weather context. Activity vs step: needs its own trigger (date, weather, dependency) → activity; fixed-offset chore around a triggered event → step
 
 ## Do not
 - Do not use class components or ORM -- raw SQL via sqlite3, schemas in schema.sql

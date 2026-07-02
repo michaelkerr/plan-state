@@ -6,6 +6,7 @@
     {
       "name": "Start Broccoli Transplants Indoors",
       "description": "Start broccoli from seed indoors 6-8 weeks before target transplant date. Needs 60-65F soil temp for germination.",
+      "group_name": "Broccoli",
       "trigger_type": "calendar",
       "trigger_def": {
         "type": "calendar",
@@ -22,6 +23,7 @@
     {
       "name": "Transplant Broccoli to Beds",
       "description": "Transplant hardened-off broccoli seedlings to bed 2. Space 18 inches apart.",
+      "group_name": "Broccoli",
       "trigger_type": "dependency",
       "trigger_def": {
         "type": "dependency",
@@ -40,6 +42,7 @@
     {
       "name": "Direct Sow Lettuce Succession 1",
       "description": "Direct sow romaine and butterhead lettuce in bed 3. First succession planting.",
+      "group_name": "Lettuce",
       "trigger_type": "compound",
       "trigger_def": {
         "type": "compound",
@@ -65,6 +68,7 @@
     {
       "name": "Direct Sow Lettuce Succession 2",
       "description": "Second lettuce succession 3 weeks after first sowing for continuous harvest.",
+      "group_name": "Lettuce",
       "trigger_type": "dependency",
       "trigger_def": {
         "type": "dependency",
@@ -80,6 +84,7 @@
     {
       "name": "Plant Garlic",
       "description": "Plant hardneck garlic cloves 2 inches deep, 6 inches apart. Needs several weeks of cold for vernalization.",
+      "group_name": "Garlic",
       "trigger_type": "compound",
       "trigger_def": {
         "type": "compound",

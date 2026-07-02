@@ -32,13 +32,13 @@ else:
 
 print("\n=== Upcoming 14 Days ===")
 activities = query_db(
-    """SELECT a.name as activity, a.status, a.trigger_date,
+    """SELECT a.name as activity, a.group_name, a.status, a.trigger_date,
               d.name as domain, a.description
        FROM activities a
        JOIN domains d ON a.domain_id = d.id
        WHERE a.status IN ('watching','preparing','active')
          AND (a.trigger_date <= ? OR a.trigger_date IS NULL)
-       ORDER BY a.trigger_date NULLS LAST""",
+       ORDER BY d.name, a.group_name NULLS LAST, a.trigger_date NULLS LAST""",
     (CUTOFF,),
 )
 print(json.dumps(activities, indent=2, default=str))
@@ -46,7 +46,7 @@ print(json.dumps(activities, indent=2, default=str))
 print("\n=== Due Steps ===")
 steps = query_db(
     """SELECT s.name as step, s.due_date, s.status,
-              a.name as activity, d.name as domain
+              a.name as activity, a.group_name, d.name as domain
        FROM steps s
        JOIN activities a ON s.activity_id = a.id
        JOIN domains d ON a.domain_id = d.id

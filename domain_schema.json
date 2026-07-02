@@ -37,6 +37,10 @@
           "type": "string",
           "description": "What this activity is and why it matters"
         },
+        "group_name": {
+          "type": "string",
+          "description": "Optional free-form bundle label within the domain (crop, bed, species, project). Display and organization only -- carries no trigger logic."
+        },
         "trigger_type": {
           "type": "string",
           "enum": ["calendar", "condition", "dependency", "compound"]

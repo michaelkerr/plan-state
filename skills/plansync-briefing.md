@@ -15,6 +15,18 @@ Keep it short and actionable. Structure as:
 
 Skip any section that has no content. Don't pad with filler.
 
+When items share a group_name, mention them as one bundle
+("Tomatoes: transplant due, harvest watch starts next week")
+instead of listing each activity separately.
+
+## Quiet days
+
+Always send a briefing, even when there is nothing actionable. The daily
+message doubles as a heartbeat confirming the system ran. If every section
+is empty, send a short all-clear instead — one or two lines, e.g.:
+"All quiet. Sync ran clean, nothing due today, nothing new this week."
+Include the weather line if available. Never return empty output.
+
 ## Tone
 
 Direct, practical. This is a working briefing, not a newsletter.
