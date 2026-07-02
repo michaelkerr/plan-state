@@ -73,6 +73,8 @@ plan-state/
 - Activity log captures all state changes with source attribution (`cron`, `hermes`, `todoist_webhook`)
 - Activities carry an optional free-form `group_name` for within-domain bundling (crop, bed, species). Display/organization only -- trigger logic comes from dependency chains, never groups. Todoist task names are prefixed "Group: Task"
 - A domain = one location/weather context. Activity vs step: needs its own trigger (date, weather, dependency) → activity; fixed-offset chore around a triggered event → step
+- weather_log assumes ONE row per location per day (sustained_days reads the last N rows). Daily high/low are derived from the 3-hourly forecast via derive_daily_range(), not the snapshot. After ad-hoc manual sync runs, delete duplicate same-day rows
+- Every condition or compound activity must include a matching `conditions` array -- the cron evaluates condition triggers from the conditions table, not trigger_def
 
 ## Do not
 - Do not use class components or ORM -- raw SQL via sqlite3, schemas in schema.sql
