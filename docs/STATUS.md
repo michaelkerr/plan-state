@@ -100,7 +100,7 @@ _Nothing yet. Migration not started._
 
 ## Known Issues / Blockers
 
-1. **Database is empty.** All v1 code works but has never processed real data. No domains, activities, or weather history exist. First domain authoring is the remaining piece of BUILD_PLAN Step 9.
+1. **First overnight cron unverified.** The Yard domain is loaded and a manual sync run pulled real weather and evaluated conditions cleanly; the remaining Step 9 check is the autonomous 6:00/6:15 AM cron pair delivering to Telegram and the first fired trigger creating Todoist tasks (Summer Fungicide Watch is estimated to fire ~2026-07-05 after 3 days of weather history).
 2. **Soil temp always NULL.** OpenWeatherMap doesn't provide soil temperature. Condition triggers using `soil_temp` metric will never fire. Authoring skill says to use daily_high as a proxy.
 
 ---
@@ -143,6 +143,12 @@ With no existing data to protect, Step 8 (YAML ingestion) could move earlier.
 ## Session Log
 
 Newest first.
+
+### 2026-07-02 (later) — First real domain loaded: Yard
+
+- Authored and loaded the Yard domain (North Murfreesboro lawn care, 14 activities, 5 groups) from user's detailed local-conditions brief; definition kept at domains/yard.json for reproducibility
+- Manual in-container sync run: pulled real Murfreesboro weather, evaluated all 6 conditions, re-estimated Summer Fungicide Watch trigger to 2026-07-03 from forecast, zero errors
+- Learned: cron evaluates condition triggers from the conditions TABLE, so condition/compound activities must include a matching conditions array; examples/fall-garden.json omits these on its compound activities (latent example bug)
 
 ### 2026-07-02 — Grouping, add_activities, Todoist fix, re-deploy
 
