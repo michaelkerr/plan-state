@@ -93,6 +93,37 @@ def log_change(conn, item_type, item_id, action, old_value, new_value):
 
 # ── Step 1: Weather Pull ────────────────────────────────────
 
+def derive_daily_range(current_temp, forecast_data, now_utc):
+    """Today's expected (high, low) from the 3-hourly forecast, blended with the
+    current reading. A single snapshot can't know the day's range -- a 6 AM run
+    would record the morning temp as the 'high'. Forecast entries are UTC;
+    'today' means the local calendar day per the response's city.timezone."""
+    if not forecast_data or not forecast_data.get("list"):
+        return current_temp, current_temp
+
+    tz_offset = timedelta(seconds=forecast_data.get("city", {}).get("timezone", 0))
+    today_local = (now_utc + tz_offset).date()
+
+    temps = []
+    for entry in forecast_data["list"]:
+        dt = entry.get("dt")
+        main = entry.get("main", {})
+        if dt is None:
+            continue
+        local_day = (datetime.fromtimestamp(dt, tz=timezone.utc).replace(tzinfo=None) + tz_offset).date()
+        if local_day != today_local:
+            continue
+        for key in ("temp", "temp_min", "temp_max"):
+            if main.get(key) is not None:
+                temps.append(main[key])
+
+    if current_temp is not None:
+        temps.append(current_temp)
+    if not temps:
+        return current_temp, current_temp
+    return max(temps), min(temps)
+
+
 def pull_weather(conn, summary):
     if not OWM_KEY:
         summary.errors.append("OPENWEATHERMAP_API_KEY not set, skipping weather pull")
@@ -121,7 +152,8 @@ def pull_weather(conn, summary):
             forecast.raise_for_status()
             fdata = forecast.json()
 
-            temp = cdata.get("main", {})
+            current_temp = cdata.get("main", {}).get("temp")
+            temp_high, temp_low = derive_daily_range(current_temp, fdata, NOW)
             weather_desc = cdata.get("weather", [{}])[0].get("main", "")
             rain = cdata.get("rain", {}).get("1h", 0) or 0
             precip_inches = rain * 0.03937
@@ -129,7 +161,7 @@ def pull_weather(conn, summary):
             conn.execute(
                 """INSERT INTO weather_log (location, temp_high, temp_low, soil_temp, conditions, precipitation, forecast_json)
                    VALUES (?,?,?,?,?,?,?)""",
-                (loc, temp.get("temp_max"), temp.get("temp_min"), None, weather_desc, precip_inches, json.dumps(fdata)),
+                (loc, temp_high, temp_low, None, weather_desc, precip_inches, json.dumps(fdata)),
             )
         except Exception as e:
             summary.errors.append(f"Weather pull failed for {loc}: {e}")
