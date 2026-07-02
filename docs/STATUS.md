@@ -3,7 +3,7 @@
 > **Read this file first in every Claude Code session.**
 > Update it at the end of every session.
 
-**Last updated**: 2026-07-01
+**Last updated**: 2026-07-02
 **Current phase**: Phase 1 (Smart Notifications)
 **Current migration step**: Pre-migration (v1 implemented, migration not started)
 
@@ -100,9 +100,8 @@ _Nothing yet. Migration not started._
 
 ## Known Issues / Blockers
 
-1. **Database is empty.** All v1 code works but has never processed real data. No domains, activities, or weather history exist.
-2. **Soil temp always NULL.** OpenWeatherMap doesn't provide soil temperature. Condition triggers using `soil_temp` metric will never fire.
-3. **Re-deploy needed.** Project was split from a monorepo into plan-state + gideon. Mac Mini needs the new two-repo layout deployed.
+1. **Database is empty.** All v1 code works but has never processed real data. No domains, activities, or weather history exist. First domain authoring is the remaining piece of BUILD_PLAN Step 9.
+2. **Soil temp always NULL.** OpenWeatherMap doesn't provide soil temperature. Condition triggers using `soil_temp` metric will never fire. Authoring skill says to use daily_high as a proxy.
 
 ---
 
@@ -144,6 +143,13 @@ With no existing data to protect, Step 8 (YAML ingestion) could move earlier.
 ## Session Log
 
 Newest first.
+
+### 2026-07-02 — Grouping, add_activities, Todoist fix, re-deploy
+
+- BUILD_PLAN Steps 12, 13, 15 complete: activity group_name (bundling within domains), add_activities MCP tool (grow existing domains, refs resolve against existing activities), Todoist pending_create enqueue reconciliation (v1 gap: nothing ever queued task creation)
+- Local plansync.db re-initialized fresh from updated schema (was empty)
+- Re-deployed on Mac Mini: register.sh ran clean against running gideon-gateway; daily sync, MCP server, and briefing-context all verified working in-container
+- Remaining for Step 9: author the first real domain, then verify overnight cron + Todoist tasks
 
 ### 2026-07-01 — Project separation
 
