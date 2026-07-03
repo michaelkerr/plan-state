@@ -144,6 +144,14 @@ With no existing data to protect, Step 8 (YAML ingestion) could move earlier.
 
 Newest first.
 
+### 2026-07-03 — Todoist v1 migration, duplicate-cron hardening
+
+- First overnight cron surfaced two issues: Todoist REST v2 sunset (410 Gone on every call) and the job double-firing at 06:00 UTC + 06:00 local (stale job records predating the TZ env)
+- Step 18: migrated daily_sync.py to unified API v1 (cursor-paginated projects, checked completion flag); verified live -- all 3 queued tasks created in Todoist with group prefixes
+- Step 19: weather pull is now a same-local-day upsert (idempotent under duplicate runs); cron jobs deleted and recreated with local-TZ schedules; single-fire verification pending 2026-07-04 morning
+- Dropped unused todoist-api-python dep whose failing import check was aborting register.sh
+- Everything before Todoist worked on the first real cron: triggers fired (incl. Summer Fungicide Watch), enqueue reconciliation queued 3 items, briefing delivered with grouped bundles
+
 ### 2026-07-02 (later) — First real domain loaded: Yard
 
 - Authored and loaded the Yard domain (North Murfreesboro lawn care, 14 activities, 5 groups) from user's detailed local-conditions brief; definition kept at domains/yard.json for reproducibility

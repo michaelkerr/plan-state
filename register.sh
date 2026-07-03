@@ -76,7 +76,7 @@ echo "[5/6] Checking dependencies..."
 docker exec "$CONTAINER" python3 -c "import mcp" 2>/dev/null \
     && echo "  mcp already installed" \
     || docker exec "$CONTAINER" /opt/hermes/.venv/bin/python3 -m pip install -q -r /opt/plansync/mcp-server/requirements.txt
-docker exec "$CONTAINER" python3 -c "import requests; import todoist_api_python" 2>/dev/null \
+docker exec "$CONTAINER" python3 -c "import requests" 2>/dev/null \
     && echo "  sync deps already installed" \
     || docker exec "$CONTAINER" /opt/hermes/.venv/bin/python3 -m pip install -q -r /opt/plansync/sync/requirements.txt
 

@@ -139,4 +139,20 @@ Plan-state is a condition-aware activity orchestrator for personal life domains.
 - **What good looks like**: Two tasks in Todoist by ~6:05 AM on 2026-07-03: "System: Todoist Sync Test" and "System: Confirm test tasks appeared, then complete both". Validates trigger fire -> enqueue -> task creation -> (on completion) poll-back, without waiting for the fungicide trigger ~July 5.
 - **Test**: manual -- observe Todoist tomorrow morning; after completing the tasks there, confirm the activity shows completed in the DB the following day
 - **Builds on**: Steps 9, 13, 15
-- **Notes**: Cleanup: after verification, the activity is already completed via the Todoist poll; no deletion needed (completed activities are inert). Validates the full loop early.
+- **Notes**: Cleanup: after verification, the activity is already completed via the Todoist poll; no deletion needed (completed activities are inert). Validates the full loop early. 2026-07-03: task creation failed with 410 Gone -- Todoist sunset REST v2. Trigger fire, enqueue, and briefing all worked; the failed creates stayed pending_create and self-healed after Step 18.
+
+### Step 18: Migrate Todoist integration to unified API v1
+- **Status**: complete
+- **What it does**: Todoist sunset the REST v2 API (all calls return 410 Gone as of July 2026). Migrate daily_sync.py to the unified v1 API at https://api.todoist.com/api/v1: GET /projects is now cursor-paginated ({"results": [...], "next_cursor"}), task create/update/close keep the same endpoints and body fields under the new base URL, and the completion flag on GET /tasks/{id} is handled as checked OR is_completed for safety. Verified empirically against the live API before coding.
+- **What good looks like**: The three pending_create items (Todoist Sync Test + step, Summer Fungicide Watch) create successfully in a "Yard" project; todoist_sync rows flip to synced with task ids stored.
+- **Test**: Pure-logic tests with a stubbed requests object: project pagination search, create-when-missing, and completion-flag parsing. Live verification via in-container sync run.
+- **Builds on**: Step 3
+- **Notes**: No stored todoist ids predate the migration (all rows were pending_create), so it's a clean cutover with no id-format migration. Built 2026-07-03 and verified live: all three pending items created in Todoist (Yard project, group prefixes intact), sync rows synced with v1 ids. Also removed the unused todoist-api-python dependency from sync/requirements.txt and register.sh's check -- the code uses raw requests, and the stale import check was aborting register.sh before cron registration. Tests in tests/test_todoist_v1.py.
+
+### Step 19: Harden against duplicate cron runs
+- **Status**: awaiting verification (single fire on 2026-07-04 morning)
+- **What it does**: The 2026-07-03 cron fired twice (06:00 UTC and 06:00 America/Chicago), producing duplicate same-day weather rows -- which broke the one-row-per-day assumption behind sustained_days and made the fungicide trigger fire a day early. Two fixes: (a) weather pull becomes a same-local-day upsert (second run refreshes the existing row instead of inserting), making the pipeline idempotent under double runs; (b) recreate both Hermes cron jobs so next_run is computed fresh under the container's current TZ (the stale job records predate the TZ env being set).
+- **What good looks like**: Running the sync twice in one day leaves exactly one weather row per location with the freshest values. Cron fires once daily at 6:00 AM local.
+- **Test**: Upsert function tested directly (insert then update path, one row remains). Cron single-fire observed on the next morning run.
+- **Builds on**: Steps 3, 16
+- **Notes**: The upsert guard also removes the manual-cleanup caveat from Step 16 -- ad-hoc verification runs now refresh instead of duplicate. Built 2026-07-03: upsert_weather_row() live (verified: manual run refreshed today's row instead of duplicating), stale duplicate rows deleted, both cron jobs deleted and recreated with next runs at 06:00/06:15 -05:00. Watch 2026-07-04 morning: exactly one plan-sync + one briefing message expected.

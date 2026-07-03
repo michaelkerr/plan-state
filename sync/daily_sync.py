@@ -158,13 +158,31 @@ def pull_weather(conn, summary):
             rain = cdata.get("rain", {}).get("1h", 0) or 0
             precip_inches = rain * 0.03937
 
-            conn.execute(
-                """INSERT INTO weather_log (location, temp_high, temp_low, soil_temp, conditions, precipitation, forecast_json)
-                   VALUES (?,?,?,?,?,?,?)""",
-                (loc, temp_high, temp_low, None, weather_desc, precip_inches, json.dumps(fdata)),
-            )
+            upsert_weather_row(conn, loc, temp_high, temp_low, weather_desc, precip_inches, json.dumps(fdata))
         except Exception as e:
             summary.errors.append(f"Weather pull failed for {loc}: {e}")
+
+
+def upsert_weather_row(conn, loc, temp_high, temp_low, conditions, precipitation, forecast_json):
+    """One weather row per location per local day. A second run the same day
+    (duplicate cron fire, manual verification) refreshes the row instead of
+    inserting -- sustained_days trigger evaluation counts rows as days."""
+    existing = conn.execute(
+        "SELECT id FROM weather_log WHERE location=? AND date(recorded_at, 'localtime') = date('now', 'localtime')",
+        (loc,),
+    ).fetchone()
+    if existing:
+        conn.execute(
+            """UPDATE weather_log SET temp_high=?, temp_low=?, conditions=?, precipitation=?,
+               forecast_json=?, recorded_at=CURRENT_TIMESTAMP WHERE id=?""",
+            (temp_high, temp_low, conditions, precipitation, forecast_json, existing["id"]),
+        )
+    else:
+        conn.execute(
+            """INSERT INTO weather_log (location, temp_high, temp_low, soil_temp, conditions, precipitation, forecast_json)
+               VALUES (?,?,?,?,?,?,?)""",
+            (loc, temp_high, temp_low, None, conditions, precipitation, forecast_json),
+        )
 
 
 # ── Step 2: Condition Evaluation ─────────────────────────────
@@ -476,11 +494,17 @@ def check_overdue(conn, summary):
 
 # ── Step 6: Todoist Sync ─────────────────────────────────────
 
-TODOIST_API = "https://api.todoist.com/rest/v2"
+# Unified v1 API -- REST v2 was sunset (410 Gone) July 2026
+TODOIST_API = "https://api.todoist.com/api/v1"
 
 
 def task_content(group_name, item_name):
     return f"{group_name}: {item_name}" if group_name else item_name
+
+
+def task_is_completed(task):
+    # v1 uses "checked"; tolerate the old REST v2 "is_completed" just in case
+    return bool(task.get("checked") or task.get("is_completed"))
 
 
 def enqueue_todoist_items(conn):
@@ -527,11 +551,20 @@ def todoist_sync(conn, summary):
 
 
 def _get_or_create_project(headers, project_name):
-    resp = requests.get(f"{TODOIST_API}/projects", headers=headers, timeout=15)
-    resp.raise_for_status()
-    for p in resp.json():
-        if p["name"] == project_name:
-            return p["id"]
+    cursor = None
+    while True:
+        params = {"limit": 200}
+        if cursor:
+            params["cursor"] = cursor
+        resp = requests.get(f"{TODOIST_API}/projects", headers=headers, params=params, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+        for p in data.get("results", []):
+            if p["name"] == project_name:
+                return p["id"]
+        cursor = data.get("next_cursor")
+        if not cursor:
+            break
 
     resp = requests.post(
         f"{TODOIST_API}/projects", headers=headers, json={"name": project_name}, timeout=15,
@@ -651,7 +684,7 @@ def _todoist_poll_completions(conn, headers, summary):
             resp.raise_for_status()
             task = resp.json()
 
-            if task.get("is_completed"):
+            if task_is_completed(task):
                 now_str = NOW.isoformat()
                 if item["plan_item_type"] == "activity":
                     conn.execute(
