@@ -28,6 +28,7 @@ Plan-state is a condition-aware activity orchestrator for personal life domains.
 - **Test**: none
 - **Builds on**: Steps 1-2
 - **Notes**: Working. Soil temp always NULL (OpenWeatherMap limitation). Runs but produces empty output since DB has no data.
+  2026-07-04 fixes from first live Todoist round-trip: (1) overdue check moved after Todoist sync so completions detected in the same run aren't reported overdue; (2) completion poll now reports polled completions in the summary (todoist_completed was always 0 for them); (3) poll skips plan items already completed/skipped locally, preventing daily re-poll/re-log of past completions. Regression tests in tests/test_poll_completions.py. Completions are detected at most once daily (6 AM poll).
 
 ### Step 4: Morning briefing pipeline
 - **Status**: complete
@@ -36,6 +37,7 @@ Plan-state is a condition-aware activity orchestrator for personal life domains.
 - **Test**: none
 - **Builds on**: Step 3
 - **Notes**: Working but empty output since no data exists.
+  2026-07-04 refinements from first real briefing: context script now feeds strict buckets — "Due Today or Overdue" (due <= today) and "This Week" (next 7 days only, dateless items excluded); skill rules tightened: priorities = due today/overdue only (these always exist in Todoist), one line per This-week item, 2-3 lines per domain then bundle, one line per location in Conditions watch, no fact repeated across sections. Length target 75-150 words.
 
 ### Step 5: Registration script
 - **Status**: complete

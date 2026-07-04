@@ -9,7 +9,7 @@ from datetime import date, timedelta
 DB_PATH = os.environ.get("PLANSYNC_DB", "/opt/plansync/plansync.db")
 OUTPUT_DIR = os.environ.get("PLANSYNC_OUTPUT_DIR", "/opt/plansync/sync-output")
 TODAY = date.today().isoformat()
-CUTOFF = (date.today() + timedelta(days=14)).isoformat()
+WEEK_CUTOFF = (date.today() + timedelta(days=7)).isoformat()
 
 
 def query_db(sql, params=()):
@@ -30,20 +30,7 @@ if os.path.exists(sync_file):
 else:
     print("No sync output for today.")
 
-print("\n=== Upcoming 14 Days ===")
-activities = query_db(
-    """SELECT a.name as activity, a.group_name, a.status, a.trigger_date,
-              d.name as domain, a.description
-       FROM activities a
-       JOIN domains d ON a.domain_id = d.id
-       WHERE a.status IN ('watching','preparing','active')
-         AND (a.trigger_date <= ? OR a.trigger_date IS NULL)
-       ORDER BY d.name, a.group_name NULLS LAST, a.trigger_date NULLS LAST""",
-    (CUTOFF,),
-)
-print(json.dumps(activities, indent=2, default=str))
-
-print("\n=== Due Steps ===")
+print("\n=== Due Today or Overdue ===")
 steps = query_db(
     """SELECT s.name as step, s.due_date, s.status,
               a.name as activity, a.group_name, d.name as domain
@@ -54,7 +41,34 @@ steps = query_db(
          AND s.due_date <= ?
          AND s.due_date IS NOT NULL
        ORDER BY s.due_date""",
-    (CUTOFF,),
+    (TODAY,),
+)
+print(json.dumps(steps, indent=2, default=str))
+
+print("\n=== This Week (next 7 days) ===")
+activities = query_db(
+    """SELECT a.name as activity, a.group_name, a.status, a.trigger_date,
+              d.name as domain
+       FROM activities a
+       JOIN domains d ON a.domain_id = d.id
+       WHERE a.status IN ('watching','preparing','active')
+         AND a.trigger_date IS NOT NULL
+         AND a.trigger_date <= ?
+       ORDER BY d.name, a.group_name NULLS LAST, a.trigger_date""",
+    (WEEK_CUTOFF,),
+)
+print(json.dumps(activities, indent=2, default=str))
+
+steps = query_db(
+    """SELECT s.name as step, s.due_date,
+              a.name as activity, a.group_name, d.name as domain
+       FROM steps s
+       JOIN activities a ON s.activity_id = a.id
+       JOIN domains d ON a.domain_id = d.id
+       WHERE s.status IN ('pending','due')
+         AND s.due_date > ? AND s.due_date <= ?
+       ORDER BY s.due_date""",
+    (TODAY, WEEK_CUTOFF),
 )
 print(json.dumps(steps, indent=2, default=str))
 

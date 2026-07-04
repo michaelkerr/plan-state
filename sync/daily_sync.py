@@ -669,8 +669,15 @@ def _todoist_close(conn, headers, summary):
 
 
 def _todoist_poll_completions(conn, headers, summary):
+    # Skip plan items already completed locally — otherwise every past
+    # completion is re-polled, re-logged, and re-reported on every run.
     synced = conn.execute(
-        "SELECT * FROM todoist_sync WHERE sync_status='synced' AND todoist_task_id IS NOT NULL"
+        """SELECT ts.*, COALESCE(a.name, s.name) as item_name
+           FROM todoist_sync ts
+           LEFT JOIN activities a ON ts.plan_item_id = a.id AND ts.plan_item_type = 'activity'
+           LEFT JOIN steps s ON ts.plan_item_id = s.id AND ts.plan_item_type = 'step'
+           WHERE ts.sync_status = 'synced' AND ts.todoist_task_id IS NOT NULL
+             AND COALESCE(a.status, s.status) NOT IN ('completed', 'skipped')"""
     ).fetchall()
 
     for item in synced:
@@ -700,6 +707,7 @@ def _todoist_poll_completions(conn, headers, summary):
                     )
                     log_change(conn, "step", item["plan_item_id"], "status_change",
                                 {"status": "due"}, {"status": "completed", "source": "todoist"})
+                summary.todoist_completed.append(item["item_name"])
         except Exception as e:
             summary.errors.append(f"Todoist poll failed for {item['plan_item_id']}: {e}")
 
@@ -736,13 +744,15 @@ def main():
         reestimate_dates(conn, summary)
         conn.commit()
 
-        check_overdue(conn, summary)
-        conn.commit()
-
         enqueue_todoist_items(conn)
         conn.commit()
 
         todoist_sync(conn, summary)
+        conn.commit()
+
+        # After Todoist sync so completions detected this run are not
+        # reported (and re-marked) as overdue.
+        check_overdue(conn, summary)
         conn.commit()
 
         save_output(summary)
