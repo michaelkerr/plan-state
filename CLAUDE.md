@@ -21,10 +21,10 @@ A condition-aware activity orchestrator for personal life domains (lawn care, ga
 
 ## Tech stack
 - **Language**: Python 3 (no type hints in existing code)
-- **Database**: SQLite 3 with WAL mode, foreign keys enabled
+- **Database**: SQLite 3, DELETE journal mode (WAL is unreliable over the exFAT/VirtioFS mount), foreign keys enabled
 - **MCP server**: `mcp>=1.0.0` (stdio JSON-RPC)
 - **HTTP clients**: `requests` (weather API, Todoist API)
-- **Todoist**: `todoist-api-python` (REST v2)
+- **Todoist**: unified API v1 via `requests`
 - **Weather**: OpenWeatherMap API (current + forecast)
 - **Runtime**: Docker container running Hermes Agent, deployed on Mac Mini
 - **Messaging**: Telegram (via Hermes gateway)
@@ -64,7 +64,7 @@ plan-state/
 
 ## Conventions
 - Database IDs are 12-char hex strings from `uuid4().hex[:12]`
-- All DB connections use WAL mode and foreign keys (`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON`)
+- All DB connections set `PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON`; never `journal_mode=WAL` (breaks over the exFAT/VirtioFS mount, see 2026-07-11 incident)
 - JSON fields in SQLite are stored as TEXT, deserialized on read via `row_to_dict()`
 - MCP tool responses are JSON wrapped in `types.TextContent`
 - Trigger definitions are JSON objects with a `type` field: `calendar`, `condition`, `dependency`, `compound`

@@ -18,6 +18,9 @@ except ImportError:  # absent in test/tooling environments; required in the cont
 DB_PATH = os.environ.get("PLANSYNC_DB", "/opt/plansync/plansync.db")
 OWM_KEY = os.environ.get("OPENWEATHERMAP_API_KEY", "")
 TODOIST_KEY = os.environ.get("TODOIST_API_KEY", "")
+# Watching activities dated within this window sync to Todoist ahead of their
+# trigger, matching the briefing's 7-day view (see enqueue_todoist_items)
+TODOIST_LOOKAHEAD_DAYS = int(os.environ.get("TODOIST_LOOKAHEAD_DAYS", "7"))
 OUTPUT_DIR = os.environ.get("PLANSYNC_OUTPUT_DIR", "/opt/plansync/sync-output")
 
 TODAY = date.today()
@@ -511,27 +514,39 @@ def task_is_completed(task):
 def enqueue_todoist_items(conn):
     """Reconciliation pass: queue Todoist task creation for anything actionable
     that has no sync row yet. Idempotent; runs regardless of API availability so
-    the queue is ready when sync happens. Nothing else writes pending_create."""
+    the queue is ready when sync happens. Nothing else writes pending_create.
+
+    Fired activities (preparing/active) enqueue with all their dated steps.
+    Watching activities dated within TODOIST_LOOKAHEAD_DAYS also enqueue, with
+    only their steps due inside the horizon, so Todoist shows the same week
+    ahead as the Telegram briefing; the rest arrives when the trigger fires."""
+    horizon = (TODAY + timedelta(days=TODOIST_LOOKAHEAD_DAYS)).isoformat()
     conn.execute(
         """INSERT INTO todoist_sync (plan_item_id, plan_item_type, sync_status)
            SELECT a.id, 'activity', 'pending_create'
            FROM activities a
-           WHERE a.status IN ('preparing','active')
+           WHERE (a.status IN ('preparing','active')
+                  OR (a.status = 'watching' AND a.trigger_date IS NOT NULL
+                      AND a.trigger_date <= :horizon))
              AND NOT EXISTS (
                SELECT 1 FROM todoist_sync ts
-               WHERE ts.plan_item_id = a.id AND ts.plan_item_type = 'activity')"""
+               WHERE ts.plan_item_id = a.id AND ts.plan_item_type = 'activity')""",
+        {"horizon": horizon},
     )
     conn.execute(
         """INSERT INTO todoist_sync (plan_item_id, plan_item_type, sync_status)
            SELECT s.id, 'step', 'pending_create'
            FROM steps s
            JOIN activities a ON s.activity_id = a.id
-           WHERE a.status IN ('preparing','active')
+           WHERE (a.status IN ('preparing','active')
+                  OR (a.status = 'watching' AND a.trigger_date IS NOT NULL
+                      AND a.trigger_date <= :horizon AND s.due_date <= :horizon))
              AND s.status IN ('pending','due')
              AND s.due_date IS NOT NULL
              AND NOT EXISTS (
                SELECT 1 FROM todoist_sync ts
-               WHERE ts.plan_item_id = s.id AND ts.plan_item_type = 'step')"""
+               WHERE ts.plan_item_id = s.id AND ts.plan_item_type = 'step')""",
+        {"horizon": horizon},
     )
 
 
