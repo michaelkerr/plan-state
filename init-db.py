@@ -18,7 +18,10 @@ def main():
 
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
-    conn.execute("PRAGMA journal_mode=WAL")
+    # DELETE, not WAL: the db lives on an exFAT bind mount (Docker VirtioFS),
+    # where WAL's shared-memory files fail sporadically with SQLITE_CANTOPEN.
+    conn.execute("PRAGMA journal_mode=DELETE")
+    conn.execute("PRAGMA busy_timeout=5000")
     conn.execute("PRAGMA foreign_keys=ON")
 
     with open(SCHEMA_PATH) as f:
