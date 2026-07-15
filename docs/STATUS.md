@@ -53,7 +53,7 @@ Implemented from archive/v1-plan-sync-mvp-spec.md. Confirmed by codebase invento
 - [x] MCP server: get_domains, get_domain_plan, create_activity, update_activity, complete_activity, defer_activity, create_domain, add_observation, get_upcoming, get_weather_current — verified via Hermes session
 - [x] Daily cron job: weather pull, condition evaluation, trigger evaluation, date cascade, overdue check, Todoist sync — runs, produces output JSON
 - [x] Todoist integration: project-per-domain, task create/update/close, completion polling
-- [ ] Domains configured: **NONE** — database is completely empty (0 rows in all tables)
+- [x] Domains configured: Yard (14 activities, loaded 2026-07-02) and Garden (46 activities, loaded 2026-07-15); definitions kept at domains/yard.json and domains/garden.json
 
 ### Codebase Inventory
 
@@ -143,6 +143,14 @@ With no existing data to protect, Step 8 (YAML ingestion) could move earlier.
 ## Session Log
 
 Newest first.
+
+### 2026-07-15 — Second domain loaded: Garden
+
+- Loaded the Garden domain (Murfreesboro 6-section rotation, 46 activities, 55 steps) from user-provided definition; kept at domains/garden.json for reproducibility
+- Near-term first-cycle build runs 2026-07 through 2027-01; standing annual backbone (succession-system-v4) runs 2027-02 onward
+- 41 calendar triggers + 5 dependency chains (potato dig ← top cut, brassica transplant ← indoor sow, garlic ← pea-vine cut, blueberry move ← bed build, fall transplants ← indoor seed); all refs verified resolved in DB
+- Loaded via server._load_domain against the volume-mounted plansync.db (same file the container reads); no Todoist sync performed — the nightly cron picks up the three activities triggering today (supply order, southern peas, potato top cut)
+- Grouped activities by bed identifier (group_name): S1/S2/S3/N1/N3, combos (S1+N1, S3+N3, S1+S2), and pseudo-beds Pots/Blueberry/Berries/North bed; 2027 standing-backbone activities pinned to their derived 2027 beds (Solanaceae=S3, Cucurbits=N1, Roots=N3, Alliums=S2, Legumes→Brassicas=S1); 5 cross-garden admin activities left ungrouped
 
 ### 2026-07-03 — Todoist v1 migration, duplicate-cron hardening
 
