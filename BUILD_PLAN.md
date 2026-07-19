@@ -160,12 +160,12 @@ Plan-state is a condition-aware activity orchestrator for personal life domains.
 - **Notes**: The upsert guard also removes the manual-cleanup caveat from Step 16 -- ad-hoc verification runs now refresh instead of duplicate. Built 2026-07-03: upsert_weather_row() live (verified: manual run refreshed today's row instead of duplicating), stale duplicate rows deleted, both cron jobs deleted and recreated with next runs at 06:00/06:15 -05:00. Verified 2026-07-19 against the live DB and sync-output/: zero duplicate location/day rows in weather_log (18 rows, 18 distinct location-days), exactly one weather row per day for every day 2026-07-04 through 2026-07-19, and one sync summary JSON per day with mtimes at ~06:00 daily since 07-05 (no later-in-day rewrite that a second fire would leave). 16 consecutive single-fire days.
 
 ### Step 20: Honest sync heartbeat (errors visible in Telegram)
-- **Status**: not started
+- **Status**: complete
 - **What it does**: Fixes an observability lie: `is_empty()` and `to_stdout()` in daily_sync.py ignore `summary.errors`, so a run where only errors happened (dead weather key, API outage) delivers "ran clean, no changes" to Telegram while the errors go to stderr. Change: the stdout heartbeat always reports error count and a one-line summary of each error; a run with errors never claims clean. The daily Telegram message is the system's only dashboard, so it must be truthful.
 - **What good looks like**: A run with a bad OPENWEATHERMAP_API_KEY produces a Telegram message that says errors occurred and names them. A genuinely clean run still produces the short "ran clean" heartbeat.
 - **Test**: Unit tests on to_stdout(): errors-only summary → output contains error count and text, not "ran clean"; empty summary with no errors → unchanged heartbeat; errors alongside real changes → both reported.
 - **Builds on**: Step 3
-- **Notes**: ~10 lines. Do first — it affects trust in the running system today and every later step benefits from honest failure reporting.
+- **Notes**: ~10 lines. Do first — it affects trust in the running system today and every later step benefits from honest failure reporting. Built and approved 2026-07-19: "ran clean" now requires no changes AND no errors; errors append an "errors: N" section (first line of each, so tracebacks don't balloon the Telegram message). stderr/exit-code behavior unchanged. Live immediately via the volume mount. Tests in tests/test_sync_heartbeat.py (6 tests).
 
 ### Step 21: Remove Todoist integration
 - **Status**: not started

@@ -59,8 +59,9 @@ class SyncSummary:
 
     def to_stdout(self):
         # Always emit something: cron output is delivered to Telegram, and an
-        # empty quiet day should still produce a heartbeat message.
-        if self.is_empty():
+        # empty quiet day should still produce a heartbeat message. A run with
+        # errors must never claim clean -- this message is the only dashboard.
+        if self.is_empty() and not self.errors:
             return f"Plan sync {TODAY.isoformat()}: ran clean, no changes."
         lines = ["---"]
         lines.append(f"triggers_fired: {len(self.triggers_fired)}")
@@ -75,6 +76,10 @@ class SyncSummary:
         lines.append(f"overdue: {len(self.overdue)}")
         for o in self.overdue:
             lines.append(f'  - "{o["name"]}" was due {o["due_date"]}')
+        if self.errors:
+            lines.append(f"errors: {len(self.errors)}")
+            for e in self.errors:
+                lines.append(f"  - {str(e).splitlines()[0]}")
         lines.append("---")
         return "\n".join(lines)
 
