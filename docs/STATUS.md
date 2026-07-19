@@ -3,9 +3,8 @@
 > **Read this file first in every Claude Code session.**
 > Update it at the end of every session.
 
-**Last updated**: 2026-07-02
-**Current phase**: Phase 1 (Smart Notifications)
-**Current migration step**: Pre-migration (v1 implemented, migration not started)
+**Last updated**: 2026-07-19
+**Current phase**: v1 in production (2 domains live); v2 PRD archived — v1 is the target architecture
 
 ---
 
@@ -76,19 +75,7 @@ Implemented from archive/v1-plan-sync-mvp-spec.md. Confirmed by codebase invento
 
 ## Migration Progress
 
-From docs/migration.md. Check off when verified per the verification criteria in that document.
-
-- [ ] Step 1: New schema tables alongside existing
-- [ ] Step 2: Data migration script (v1 data -> new tables)
-- [ ] Step 3: MCP tools dual-read from new tables
-- [ ] Step 4: Cron job writes signals alongside existing
-- [ ] Step 5: Push notifications alongside Todoist
-- [ ] Step 6: Resource pool tracking
-- [ ] Step 7: Local LLM notification content generation
-- [ ] Step 8: Domain definition YAML ingestion + authoring skill
-- [ ] Step 9: System health + external watchdog
-- [ ] Step 10: Old tables retired
-- [ ] Step 11: (Optional) Cron -> processing loop
+Retired 2026-07-19. The v2 signals-and-boundaries architecture and its migration plan are archived at docs/archive/v2-signals-boundaries-prd.md — revisit only if a full season of operation surfaces a concrete limitation of the v1 relational model. Useful Phase-1 ideas (watchdog, push notifications, inventory tracking) get harvested as individual BUILD_PLAN.md steps instead.
 
 ---
 
@@ -135,8 +122,8 @@ With no existing data to protect, Step 8 (YAML ingestion) could move earlier.
 | Document | What it is | When to update |
 |---|---|---|
 | **STATUS.md** (this) | Current state, session entry point | Every session |
-| **prd.md** | Target architecture + requirements | When requirements change |
 | **archive/v1-plan-sync-mvp-spec.md** | Original v1 spec (as-built) | Never (frozen) |
+| **archive/v2-signals-boundaries-prd.md** | Shelved v2 architecture | Never (archived 2026-07-19) |
 
 ---
 

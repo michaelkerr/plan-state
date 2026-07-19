@@ -53,9 +53,9 @@ plan-state/
 ├── sync-output/                # Daily JSON summaries (runtime, gitignored)
 └── docs/
     ├── STATUS.md               # Session-level state tracking
-    ├── prd.md                  # Target v2 architecture (signals & boundaries)
     └── archive/
-        └── v1-plan-sync-mvp-spec.md  # Original v1 spec (frozen)
+        ├── v1-plan-sync-mvp-spec.md       # Original v1 spec (frozen)
+        └── v2-signals-boundaries-prd.md   # Shelved v2 architecture (archived 2026-07-19; revisit only if a full season surfaces a concrete v1 limitation)
 ```
 
 **Sibling repo**: `../gideon/` contains Hermes infrastructure (docker-compose.yml, .env, config.yaml). Plan-state registers itself into Gideon via `register.sh`.
