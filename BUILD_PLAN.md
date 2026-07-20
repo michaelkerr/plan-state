@@ -1,14 +1,11 @@
-Build Plan
+# Build Plan
 
-Product summary
+## Product summary
 
 Plan-state is a condition-aware activity orchestrator for personal life domains. It stores structured plans in SQLite, evaluates triggers daily against weather and calendar conditions, cascades dates through prep/follow-up chains, and delivers actionable briefings via Telegram. Deployed as a capability registering into a Hermes Agent instance (Gideon) on a Mac Mini. v1 is in production with two domains (Yard, Garden). The current focus is hardening (removing dead code, consolidating duplicated logic, fixing schema gaps) and making the system AI-agnostic so Claude and Hermes are equal peers of the same engine.
 
-Steps
-
-Step 1: SQLite database and schema
-
-
+## Steps
+### Step 1: SQLite database and schema
 Status: complete
 What it does: 7-table schema (domains, activities, steps, conditions, weather_log, todoist_sync, activity_log) with indexes, constraints, WAL mode, foreign keys
 What good looks like: init-db.py creates the database; schema.sql applied cleanly
@@ -17,9 +14,7 @@ Builds on: nothing
 Notes: Working. Database exists but is empty.
 
 
-Step 2: MCP server with 10 tools
-
-
+### Step 2: MCP server with 10 tools
 Status: complete
 What it does: stdio JSON-RPC MCP server exposing get_domains, get_domain_plan, create_domain, create_activity, update_activity, complete_activity, defer_activity, add_observation, get_upcoming, get_weather_current
 What good looks like: Hermes can call all tools, create and query domain data
@@ -28,9 +23,7 @@ Builds on: Step 1
 Notes: Working. Auto-creates DB if missing. Bug: _create_domain logs item_type as "activity" instead of "domain".
 
 
-Step 3: Daily sync pipeline
-
-
+### Step 3: Daily sync pipeline
 Status: complete
 What it does: 7-step deterministic cron job: weather pull, condition evaluation, trigger evaluation, date re-estimation, overdue check, Todoist sync, summary output
 What good looks like: Runs daily at 6 AM, produces JSON summary, syncs tasks to Todoist
@@ -40,9 +33,7 @@ Notes: Working. Soil temp always NULL (OpenWeatherMap limitation). Runs but prod
 2026-07-04 fixes from first live Todoist round-trip: (1) overdue check moved after Todoist sync so completions detected in the same run aren't reported overdue; (2) completion poll now reports polled completions in the summary (todoist_completed was always 0 for them); (3) poll skips plan items already completed/skipped locally, preventing daily re-poll/re-log of past completions. Regression tests in tests/test_poll_completions.py. Completions are detected at most once daily (6 AM poll).
 
 
-Step 4: Morning briefing pipeline
-
-
+### Step 4: Morning briefing pipeline
 Status: complete
 What it does: briefing-context.py reads sync output + DB state, briefing skill instructs LLM to generate human-readable briefing
 What good looks like: Concise actionable briefing delivered to Telegram at 6:15 AM
@@ -52,9 +43,7 @@ Notes: Working but empty output since no data exists.
 2026-07-04 refinements from first real briefing: context script now feeds strict buckets — "Due Today or Overdue" (due <= today) and "This Week" (next 7 days only, dateless items excluded); skill rules tightened: priorities = due today/overdue only (these always exist in Todoist), one line per This-week item, 2-3 lines per domain then bundle, one line per location in Conditions watch, no fact repeated across sections. Length target 75-150 words.
 
 
-Step 5: Registration script
-
-
+### Step 5: Registration script
 Status: complete
 What it does: register.sh copies skills/scripts to Hermes data dir, initializes DB, installs pip deps, registers MCP server and cron jobs
 What good looks like: Single command connects plan-state to a running Hermes instance
@@ -63,9 +52,7 @@ Builds on: Steps 1-4
 Notes: Working. Needs to be run on Mac Mini with new two-repo layout.
 
 
-Step 6: Domain definition schema
-
-
+### Step 6: Domain definition schema
 Status: complete
 What it does: A JSON schema defining a complete domain definition -- one domain with all its activities, steps, conditions, and triggers in a single document. This is the contract between any LLM (Hermes, Claude, etc.) and the system.
 What good looks like: Schema validates realistic domain definitions (lawn care, garden, hunting). An LLM can produce a conforming document from a planning conversation. Schema catches common errors (missing required fields, invalid trigger types, bad lead_days).
@@ -256,12 +243,13 @@ Then: 26 (doc consolidation, after both tracks complete)
 Step 27: AI-agnostic access (source attribution + Claude MCP registration)
 
 
-Status: not started
+Status: complete
 What it does: Two changes that make the system agent-neutral. (1) Open the source enum in activity_log: currently CHECK(source IN ('cron','hermes')) -- change to allow 'claude' and 'human'. Pass client identity into the MCP server via a PLANSYNC_CLIENT env var (defaults to 'hermes'; Claude desktop config sets it to 'claude'). log_change reads the env var instead of hardcoding 'hermes'. (2) Register the same MCP server in Claude desktop: add a claude_desktop_config.json entry pointing at docker exec -i gideon-gateway python /opt/plansync/mcp-server/server.py. Zero new code -- Claude gets the same tools Hermes has, all writes stay container-side (no mount-locking issues), and both agents are peers of the same engine.
 What good looks like: Claude desktop lists all plansync tools. Creating an activity from Claude logs source='claude' in activity_log. Creating from Hermes still logs 'hermes'. The DB is written only from inside the container regardless of which agent initiated the call.
 Test: Call load_domain from Claude desktop, verify activity_log row has source='claude'. Call from Hermes, verify source='hermes'. Verify both writes succeed without locking errors.
 Builds on: Step 2
-Notes: Do this first -- it unblocks the operational workflow problem (Claude sessions can read and write live state instead of talking about it in conversation and hoping it gets transcribed). The schema change is compatible with the current DB (SQLite CHECK constraints are not enforced on existing rows); Step 25's migration carries the new constraint forward cleanly. Provide a sample claude_desktop_config.json snippet in the repo README or a dedicated docs/claude-setup.md. The docker exec approach means the server process lifecycle is tied to each tool call (starts, serves, exits) rather than running persistently -- acceptable for interactive use; if latency matters later, a persistent stdio wrapper is a small addition.
+Notes: Do this first -- it unblocks the operational workflow problem (Claude sessions can read and write live state instead of talking about it in conversation and hoping it gets transcribed). Provide a sample claude_desktop_config.json snippet in the repo README or a dedicated docs/claude-setup.md. The docker exec approach means the server process lifecycle is tied to each tool call (starts, serves, exits) rather than running persistently -- acceptable for interactive use; if latency matters later, a persistent stdio wrapper is a small addition.
+Built 2026-07-20. Plan correction: the original note claimed the schema CHECK change was compatible with the current DB -- wrong for new inserts (SQLite enforces the live table's stored CHECK on every insert), so scripts/migrate-source-enum.py rebuilds activity_log with the widened constraint (idempotent, row-count-verified, transactional). log_change resolves its default source from PLANSYNC_CLIENT at call time (explicit source arg still wins); cron path untouched. Setup documented in docs/claude-setup.md. Verified live end-to-end 2026-07-20: migration applied to the live DB (128 rows intact), plansync registered in Claude desktop on the Mac Mini via docker exec with PLANSYNC_CLIENT=claude, add_observation from a Claude session logged source='claude' while prior hermes/cron rows were unchanged. Regression tests in tests/test_source_attribution.py (6 tests).
 
 
 Step 28: Extract shared engine module

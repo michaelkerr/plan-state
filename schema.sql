@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS activity_log (
   action          TEXT NOT NULL CHECK(action IN ('status_change','date_cascade','trigger_fire','manual_update','created','observation')),
   old_value       JSON,
   new_value       JSON,
-  source          TEXT NOT NULL CHECK(source IN ('cron','hermes'))
+  source          TEXT NOT NULL CHECK(source IN ('cron','hermes','claude','human'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_activities_domain ON activities(domain_id);
