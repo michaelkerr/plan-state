@@ -75,6 +75,31 @@ def cascade_step_dates(conn, activity_id, trigger_date_str, source=None, on_chan
                 on_change(s, old_due, new_due)
 
 
+def derive_conditions(trigger_def):
+    """Walk a trigger_def tree and return conditions-row dicts
+    ({condition_type, definition}) for every clause in condition-type leaves.
+    trigger_def is the source of truth; the conditions table is an evaluation
+    cache the cron updates (is_met / current_value)."""
+    if isinstance(trigger_def, str):
+        trigger_def = json.loads(trigger_def)
+    rows = []
+
+    def walk(node):
+        if not isinstance(node, dict):
+            return
+        t = node.get("type")
+        if t == "condition":
+            for clause in node.get("all", []):
+                ctype = "weather_event" if "event" in clause else "temperature"
+                rows.append({"condition_type": ctype, "definition": clause})
+        elif t == "compound":
+            for sub in node.get("conditions", []):
+                walk(sub)
+
+    walk(trigger_def)
+    return rows
+
+
 def compute_trigger_date(trigger_def):
     if not trigger_def:
         return None

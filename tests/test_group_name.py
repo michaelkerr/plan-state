@@ -149,26 +149,33 @@ class TestQueryTools:
 
 
 class TestCreateUpdateActivity:
-    def test_create_activity_persists_group_name(self, db):
-        domain = call_tool("_create_domain", {"name": "Garden"})
-        created = call_tool("_create_activity", {
+    def test_single_activity_add_persists_group_name(self, db):
+        # single-activity creation is add_activities with a one-element array
+        domain = call_tool("_load_domain", {"definition": GARDEN})
+        result = call_tool("_add_activities", {
             "domain_id": domain["id"],
-            "name": "Plant Onions",
-            "group_name": "Onions",
-            "trigger_type": "calendar",
-            "trigger_def": {"type": "calendar", "date": "2026-09-01"},
+            "activities": [{
+                "name": "Plant Onions",
+                "group_name": "Onions",
+                "trigger_type": "calendar",
+                "trigger_def": {"type": "calendar", "date": "2026-09-01"},
+            }],
         })
+        created = result["activities"][0]
         row = db.execute("SELECT group_name FROM activities WHERE id=?", (created["id"],)).fetchone()
         assert row["group_name"] == "Onions"
 
     def test_update_activity_sets_group_name(self, db):
-        domain = call_tool("_create_domain", {"name": "Garden"})
-        created = call_tool("_create_activity", {
+        domain = call_tool("_load_domain", {"definition": GARDEN})
+        result = call_tool("_add_activities", {
             "domain_id": domain["id"],
-            "name": "Plant Onions",
-            "trigger_type": "calendar",
-            "trigger_def": {"type": "calendar", "date": "2026-09-01"},
+            "activities": [{
+                "name": "Plant Onions",
+                "trigger_type": "calendar",
+                "trigger_def": {"type": "calendar", "date": "2026-09-01"},
+            }],
         })
+        created = result["activities"][0]
         updated = call_tool("_update_activity", {"activity_id": created["id"], "group_name": "Onions"})
         assert updated["group_name"] == "Onions"
         row = db.execute("SELECT group_name FROM activities WHERE id=?", (created["id"],)).fetchone()

@@ -10,16 +10,17 @@ user reports completions conversationally.
 
 - get_domains() -- list all domains
 - get_domain_plan(domain_id) -- full plan state for a domain
-- create_activity(...) -- create activity with steps and triggers
-- update_activity(...) -- modify an existing activity
+- load_domain(definition) -- bulk-load a complete domain with all activities and steps in one call (conditions derived from trigger_def)
+- add_activities(domain_id, activities) -- add activities to an existing domain; also the path for a single new activity (one-element array); activity_ref can reference activities already in the domain
+- update_activity(...) -- modify an existing activity (changing trigger_def re-derives conditions)
 - complete_activity(...) -- mark done, cascade follow-ups
 - defer_activity(...) -- push dates, re-cascade
-- create_domain(...) -- new domain (single domain, no activities)
-- load_domain(definition) -- bulk-load a complete domain with all activities, steps, conditions in one call
-- add_activities(domain_id, activities) -- add activities to an existing domain; activity_ref can reference activities already in the domain
 - add_observation(...) -- record field observation
 - get_upcoming(days_ahead) -- cross-domain upcoming view
 - get_weather_current(location) -- latest weather + forecast
+
+Creation goes through load_domain (new domain) or add_activities
+(existing domain) ONLY -- there are no single-shot create tools.
 
 ## Workflow
 
@@ -50,7 +51,7 @@ Fixed date. Use when the activity has a known target date.
 Weather/soil condition threshold. The cron job evaluates these daily.
 ```json
 {"type": "condition", "all": [
-  {"metric": "soil_temp", "operator": ">=", "value": 55, "sustained_days": 3}
+  {"metric": "daily_high", "operator": ">=", "value": 55, "sustained_days": 3}
 ]}
 ```
 
@@ -65,9 +66,14 @@ Combine calendar and condition triggers.
 ```json
 {"type": "compound", "operator": "AND", "conditions": [
   {"type": "calendar", "after": "2026-08-15"},
-  {"type": "condition", "metric": "daily_high", "operator": "<=", "value": 85, "sustained_days": 3}
+  {"type": "condition", "all": [
+    {"metric": "daily_high", "operator": "<=", "value": 85, "sustained_days": 3}
+  ]}
 ]}
 ```
+
+Condition rows in the database are derived automatically from the
+condition-type leaves of trigger_def -- never author them directly.
 
 ## Important
 

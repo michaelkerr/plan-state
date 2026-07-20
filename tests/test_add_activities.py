@@ -64,14 +64,17 @@ NEW_ACTIVITIES = [
     {
         "name": "Harvest Garlic",
         "group_name": "Garlic",
-        "trigger_type": "calendar",
-        "trigger_def": {"type": "calendar", "date": "2027-06-20"},
-        "conditions": [
-            {
-                "condition_type": "calendar",
-                "definition": {"date": "2027-06-20"},
-            }
-        ],
+        "trigger_type": "compound",
+        "trigger_def": {
+            "type": "compound",
+            "operator": "AND",
+            "conditions": [
+                {"type": "calendar", "after": "2027-06-20"},
+                {"type": "condition", "all": [
+                    {"metric": "daily_high", "operator": ">=", "value": 75, "sustained_days": 2}
+                ]},
+            ],
+        },
     },
 ]
 
@@ -169,7 +172,7 @@ class TestAddActivitiesValid:
         row = db.execute("SELECT trigger_date FROM activities WHERE id=?", (harvest_garlic["id"],)).fetchone()
         assert row["trigger_date"] == "2027-06-20"
 
-    def test_conditions_created(self, db, loaded_domain):
+    def test_conditions_derived_from_trigger_def(self, db, loaded_domain):
         result = call_tool("_add_activities", {
             "domain_id": loaded_domain["id"],
             "activities": NEW_ACTIVITIES,
@@ -177,6 +180,8 @@ class TestAddActivitiesValid:
         harvest_garlic = next(a for a in result["activities"] if a["name"] == "Harvest Garlic")
         conds = db.execute("SELECT * FROM conditions WHERE activity_id=?", (harvest_garlic["id"],)).fetchall()
         assert len(conds) == 1
+        assert conds[0]["condition_type"] == "temperature"
+        assert json.loads(conds[0]["definition"])["metric"] == "daily_high"
 
     def test_group_name_persisted(self, db, loaded_domain):
         result = call_tool("_add_activities", {

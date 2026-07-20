@@ -310,6 +310,11 @@ def _check_trigger(conn, act, tdef):
             prep_start = target_date - timedelta(days=max_prep)
             if TODAY >= prep_start:
                 return True, f"calendar: prep window opened (target {target})"
+            return False, ""
+        # "after" is a compound gate: earliest allowed date, no prep-window offset
+        after = tdef.get("after")
+        if after and TODAY >= date.fromisoformat(after):
+            return True, f"calendar: after {after}"
         return False, ""
 
     if ttype == "condition":

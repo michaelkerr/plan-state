@@ -52,7 +52,7 @@ docker exec -it gideon-gateway hermes chat -q 'Use the plansync tools to list do
 ## What's built
 
 - **SQLite plan store**: 6-table schema tracking domains, activities, steps, conditions, weather, and an activity log
-- **MCP server**: 12 tools for reading and writing plan state (load/amend domains, create/update/complete/defer activities, record observations, query upcoming items and weather)
+- **MCP server**: 10 tools for reading and writing plan state (load/amend domains, update/complete/defer activities, record observations, query upcoming items and weather)
 - **Daily sync pipeline**: deterministic script -- weather pull, condition evaluation, trigger evaluation, date re-estimation, overdue check, summary output
 - **Morning briefing**: LLM-generated daily briefing from sync output
 - **Evening nudge**: deterministic reminder of anything still open today; silent on clear days

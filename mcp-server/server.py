@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from plansync.engine import (  # noqa: E402
     cascade_step_dates,
     compute_trigger_date,
+    derive_conditions,
     get_db,
     log_change,
     row_to_dict,
@@ -49,61 +50,6 @@ async def list_tools() -> list[types.Tool]:
                 "type": "object",
                 "properties": {"domain_id": {"type": "string"}},
                 "required": ["domain_id"],
-            },
-        ),
-        types.Tool(
-            name="create_domain",
-            description="Create a new planning domain (e.g. 'Fall Garden', 'Deer Hunting').",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string"},
-                    "location": {"type": "string", "description": "Location for weather queries"},
-                    "notes": {"type": "string"},
-                },
-                "required": ["name"],
-            },
-        ),
-        types.Tool(
-            name="create_activity",
-            description="Create an activity with optional prep/follow-up steps and trigger conditions.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "domain_id": {"type": "string"},
-                    "name": {"type": "string"},
-                    "description": {"type": "string"},
-                    "group_name": {"type": "string", "description": "Optional bundle label within the domain (crop, bed, species). Display only."},
-                    "trigger_type": {"type": "string", "enum": ["calendar", "condition", "dependency", "compound"]},
-                    "trigger_def": {"type": "object", "description": "Structured trigger definition"},
-                    "recurrence": {"type": "object", "description": "Recurrence rule, if cyclical"},
-                    "steps": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "name": {"type": "string"},
-                                "description": {"type": "string"},
-                                "step_type": {"type": "string", "enum": ["prep", "follow_up"]},
-                                "lead_days": {"type": "integer"},
-                                "condition": {"type": "object"},
-                            },
-                            "required": ["name", "step_type", "lead_days"],
-                        },
-                    },
-                    "conditions": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "condition_type": {"type": "string", "enum": ["temperature", "weather_event", "calendar", "dependency"]},
-                                "definition": {"type": "object"},
-                            },
-                            "required": ["condition_type", "definition"],
-                        },
-                    },
-                },
-                "required": ["domain_id", "name", "trigger_type", "trigger_def"],
             },
         ),
         types.Tool(
@@ -229,10 +175,6 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             return _get_domains(conn)
         elif name == "get_domain_plan":
             return _get_domain_plan(conn, arguments["domain_id"])
-        elif name == "create_domain":
-            return _create_domain(conn, arguments)
-        elif name == "create_activity":
-            return _create_activity(conn, arguments)
         elif name == "update_activity":
             return _update_activity(conn, arguments)
         elif name == "complete_activity":
@@ -295,17 +237,6 @@ def _get_domain_plan(conn, domain_id) -> list[types.TextContent]:
         domain["activities"].append(a)
 
     return ok(domain)
-
-
-def _create_domain(conn, args) -> list[types.TextContent]:
-    did = new_id()
-    conn.execute(
-        "INSERT INTO domains (id, name, location, notes) VALUES (?,?,?,?)",
-        (did, args["name"], args.get("location"), args.get("notes")),
-    )
-    log_change(conn, "domain", did, "created", None, {"name": args["name"]})
-    conn.commit()
-    return ok({"id": did, "name": args["name"], "location": args.get("location")})
 
 
 def _load_domain(conn, args) -> list[types.TextContent]:
@@ -392,7 +323,7 @@ def _insert_activity(conn, domain_id, aid, act_def, name_to_id, default_sort):
         )
         created_steps.append({"id": sid, "name": step_def["name"], "due_date": due})
 
-    for cond_def in act_def.get("conditions", []):
+    for cond_def in derive_conditions(trigger_def):
         cid = new_id()
         conn.execute(
             "INSERT INTO conditions (id, activity_id, condition_type, definition) VALUES (?,?,?,?)",
@@ -478,6 +409,11 @@ def _validate_activities(activities, errors, existing_names=frozenset()):
         if not isinstance(act, dict):
             errors.append({"path": prefix, "error": "Must be an object"})
             continue
+        if "conditions" in act:
+            errors.append({
+                "path": f"{prefix}.conditions",
+                "error": "Explicit conditions arrays are no longer accepted; conditions rows are derived automatically from condition-type leaves in trigger_def. Remove this field.",
+            })
         if "name" not in act:
             errors.append({"path": f"{prefix}.name", "error": "Required field missing"})
         elif act["name"] in batch_names or act["name"] in existing_names:
@@ -543,63 +479,6 @@ def _resolve_refs(tdef, name_to_id):
     return result
 
 
-def _create_activity(conn, args) -> list[types.TextContent]:
-    aid = new_id()
-    trigger_def = args["trigger_def"]
-    trigger_def_str = json.dumps(trigger_def) if isinstance(trigger_def, dict) else trigger_def
-    trigger_date = compute_trigger_date(trigger_def)
-
-    conn.execute(
-        """INSERT INTO activities (id, domain_id, name, description, group_name, trigger_type, trigger_def, trigger_date, recurrence, sort_order)
-           VALUES (?,?,?,?,?,?,?,?,?,?)""",
-        (
-            aid,
-            args["domain_id"],
-            args["name"],
-            args.get("description"),
-            args.get("group_name"),
-            args["trigger_type"],
-            trigger_def_str,
-            trigger_date,
-            json.dumps(args["recurrence"]) if args.get("recurrence") else None,
-            args.get("sort_order", 0),
-        ),
-    )
-    log_change(conn, "activity", aid, "created", None, {"name": args["name"], "trigger_type": args["trigger_type"]})
-
-    created_steps = []
-    for i, step in enumerate(args.get("steps", [])):
-        sid = new_id()
-        due = step_due_date(trigger_date, step["step_type"], step["lead_days"])
-        conn.execute(
-            """INSERT INTO steps (id, activity_id, name, description, step_type, lead_days, due_date, condition, sort_order)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
-            (
-                sid, aid, step["name"], step.get("description"),
-                step["step_type"], step["lead_days"], due,
-                json.dumps(step["condition"]) if step.get("condition") else None,
-                i,
-            ),
-        )
-        created_steps.append({"id": sid, "name": step["name"], "due_date": due})
-
-    for cond in args.get("conditions", []):
-        cid = new_id()
-        conn.execute(
-            "INSERT INTO conditions (id, activity_id, condition_type, definition) VALUES (?,?,?,?)",
-            (cid, aid, cond["condition_type"], json.dumps(cond["definition"])),
-        )
-
-    conn.commit()
-    return ok({
-        "id": aid,
-        "name": args["name"],
-        "trigger_date": trigger_date,
-        "status": "watching",
-        "steps": created_steps,
-    })
-
-
 def _update_activity(conn, args) -> list[types.TextContent]:
     aid = args["activity_id"]
     current = conn.execute("SELECT * FROM activities WHERE id=?", (aid,)).fetchone()
@@ -624,6 +503,15 @@ def _update_activity(conn, args) -> list[types.TextContent]:
     sets.append("updated_at=CURRENT_TIMESTAMP")
     vals.append(aid)
     conn.execute(f"UPDATE activities SET {', '.join(sets)} WHERE id=?", vals)
+
+    if "trigger_def" in changes:
+        # trigger_def is the source of truth: rebuild the derived conditions cache
+        conn.execute("DELETE FROM conditions WHERE activity_id=?", (aid,))
+        for cond_def in derive_conditions(args["trigger_def"]):
+            conn.execute(
+                "INSERT INTO conditions (id, activity_id, condition_type, definition) VALUES (?,?,?,?)",
+                (new_id(), aid, cond_def["condition_type"], json.dumps(cond_def["definition"])),
+            )
 
     if "trigger_date" in args and args["trigger_date"] != current.get("trigger_date"):
         cascade_step_dates(conn, aid, args["trigger_date"])

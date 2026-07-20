@@ -55,10 +55,6 @@
         "steps": {
           "type": "array",
           "items": { "$ref": "#/$defs/step" }
-        },
-        "conditions": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/condition" }
         }
       },
       "additionalProperties": false
@@ -166,21 +162,6 @@
         "condition": {
           "type": "object",
           "description": "Optional conditional activation logic for this step"
-        }
-      },
-      "additionalProperties": false
-    },
-    "condition": {
-      "type": "object",
-      "required": ["condition_type", "definition"],
-      "properties": {
-        "condition_type": {
-          "type": "string",
-          "enum": ["temperature", "weather_event", "calendar", "dependency"]
-        },
-        "definition": {
-          "type": "object",
-          "description": "Condition-type-specific definition (metric, operator, value, sustained_days for temperature; event for weather_event; date for calendar; activity_id+event for dependency)"
         }
       },
       "additionalProperties": false

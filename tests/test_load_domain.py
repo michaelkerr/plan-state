@@ -100,7 +100,8 @@ class TestLoadDomainValid:
             "SELECT c.* FROM conditions c JOIN activities a ON c.activity_id=a.id WHERE a.domain_id=?",
             (result["id"],),
         ).fetchall()
-        assert len(db_conditions) == 1  # only pre-emergent has explicit conditions
+        # derived from trigger_def: pre-emergent and fall-aeration each carry one condition leaf clause
+        assert len(db_conditions) == 2
 
     def test_dependency_refs_resolved(self, db):
         definition = load_example("lawn-care.json")

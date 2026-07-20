@@ -87,12 +87,11 @@ Activity format (used by both `load_domain` and `add_activities`):
   "sort_order": 1,
   "steps": [
     {"name": "Step name", "step_type": "prep|follow_up", "lead_days": 7, "description": "Optional"}
-  ],
-  "conditions": [
-    {"condition_type": "temperature|weather_event|calendar|dependency", "definition": { ... }}
   ]
 }
 ```
+
+Do NOT include a `conditions` array — the system derives condition rows automatically from the condition-type leaves of `trigger_def`, and definitions that include an explicit `conditions` field are rejected.
 
 Create mode wraps activities in a domain:
 
@@ -199,12 +198,6 @@ Use compound when the trigger requires BOTH a date window AND a weather conditio
         {"name": "Order if needed", "step_type": "prep", "lead_days": 10},
         {"name": "Calibrate spreader", "step_type": "prep", "lead_days": 1},
         {"name": "Water in application", "step_type": "follow_up", "lead_days": 1, "description": "0.5 inches to activate"}
-      ],
-      "conditions": [
-        {
-          "condition_type": "temperature",
-          "definition": {"metric": "daily_high", "operator": ">=", "value": 55, "sustained_days": 3}
-        }
       ]
     },
     {
@@ -273,7 +266,7 @@ Note the pattern: one crop, one group, three activities in a dependency chain. T
 ## Important rules
 
 - Every activity MUST have `name`, `trigger_type`, and `trigger_def`. Steps and conditions are optional but recommended.
-- **Every `condition` or `compound` activity MUST also include a matching `conditions` array** (mirroring each condition-type leaf of the trigger_def). The daily cron evaluates weather from the conditions table, not from trigger_def — an activity missing its conditions array will silently never fire.
+- **Never include a `conditions` array** — condition rows are derived automatically from the condition-type leaves of `trigger_def` at load/update time, and an explicit `conditions` field fails validation. `trigger_def` is the single source of truth for when an activity fires.
 - Use `activity_ref` (name string) for dependencies, NOT `activity_id`.
 - Activity names must be unique within the domain — in amend mode, check `get_domain_plan` output for collisions before loading.
 - `lead_days` must be 0 or positive. Prep steps count backward from the trigger date, follow-ups forward.

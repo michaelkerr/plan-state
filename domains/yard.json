@@ -8,11 +8,23 @@
       "description": "Sample now (July) so results set the September fertilizer plan. Collect 10-12 cores at 4 inches, front and back lawns as separate samples. Drop at Rutherford County Extension, Lane Agri-Park on John R. Rice Blvd (lab: soillab.tennessee.edu). The only decision-sensitive item before September.",
       "group_name": "Soil & Site",
       "trigger_type": "calendar",
-      "trigger_def": {"type": "calendar", "date": "2026-07-15"},
+      "trigger_def": {
+        "type": "calendar",
+        "date": "2026-07-15"
+      },
       "sort_order": 1,
       "steps": [
-        {"name": "Pick up soil test boxes and forms at Extension office", "step_type": "prep", "lead_days": 3},
-        {"name": "Review soil test results and set fall fertilizer plan", "step_type": "follow_up", "lead_days": 21, "description": "Expect high P (Central Basin phosphatic limestone): if confirmed, 16-0-8 for fall, no starter at overseed. Expect near-neutral pH: no lime unless the test explicitly calls for it."}
+        {
+          "name": "Pick up soil test boxes and forms at Extension office",
+          "step_type": "prep",
+          "lead_days": 3
+        },
+        {
+          "name": "Review soil test results and set fall fertilizer plan",
+          "step_type": "follow_up",
+          "lead_days": 21,
+          "description": "Expect high P (Central Basin phosphatic limestone): if confirmed, 16-0-8 for fall, no starter at overseed. Expect near-neutral pH: no lime unless the test explicitly calls for it."
+        }
       ]
     },
     {
@@ -20,7 +32,10 @@
       "description": "North Murfreesboro splits between Murfreesboro Water Resources and Consolidated Utility District by annexation line. Confirm which one bills the house, check their odd/even summer irrigation schedule, then program the controller so cycle-and-soak fits inside allowed days.",
       "group_name": "Soil & Site",
       "trigger_type": "calendar",
-      "trigger_def": {"type": "calendar", "date": "2026-07-10"},
+      "trigger_def": {
+        "type": "calendar",
+        "date": "2026-07-10"
+      },
       "sort_order": 2
     },
     {
@@ -28,11 +43,22 @@
       "description": "Construction fill here reliably imports dallisgrass and johnsongrass with the nutsedge. No pre-emergent touches dallisgrass and nothing selective kills it cleanly in fescue since MSMA left the residential market. Spot-spray glyphosate on a windless day while the clumps are few -- waiting a year turns a 10-minute job into a renovation. Kill spots get reseeded in September.",
       "group_name": "Weeds",
       "trigger_type": "calendar",
-      "trigger_def": {"type": "calendar", "date": "2026-07-20"},
+      "trigger_def": {
+        "type": "calendar",
+        "date": "2026-07-20"
+      },
       "sort_order": 3,
       "steps": [
-        {"name": "Buy glyphosate and a small pump sprayer", "step_type": "prep", "lead_days": 3},
-        {"name": "Flag sprayed spots for September reseed", "step_type": "follow_up", "lead_days": 1}
+        {
+          "name": "Buy glyphosate and a small pump sprayer",
+          "step_type": "prep",
+          "lead_days": 3
+        },
+        {
+          "name": "Flag sprayed spots for September reseed",
+          "step_type": "follow_up",
+          "lead_days": 1
+        }
       ]
     },
     {
@@ -43,32 +69,62 @@
       "trigger_def": {
         "type": "condition",
         "all": [
-          {"metric": "daily_low", "operator": ">=", "value": 68, "sustained_days": 3}
+          {
+            "metric": "daily_low",
+            "operator": ">=",
+            "value": 68,
+            "sustained_days": 3
+          }
         ]
       },
-      "sort_order": 4,
-      "conditions": [
-        {
-          "condition_type": "temperature",
-          "definition": {"metric": "daily_low", "operator": ">=", "value": 68, "sustained_days": 3}
-        }
-      ]
+      "sort_order": 4
     },
     {
       "name": "Armyworm Scouting",
       "description": "Middle TN gets episodic fall armyworm waves in August-September (2021 was a local massacre), and a freshly germinated September overseed is their favorite meal. Soap-flush weekly from mid-August: 2 tbsp dish soap in 1 gal water over a square foot, count what surfaces. If larvae show, treat with bifenthrin or spinosad the SAME DAY -- hours matter, not days.",
       "group_name": "Pests & Disease",
       "trigger_type": "calendar",
-      "trigger_def": {"type": "calendar", "date": "2026-08-15"},
+      "trigger_def": {
+        "type": "calendar",
+        "date": "2026-08-15"
+      },
       "sort_order": 5,
       "steps": [
-        {"name": "Have bifenthrin or spinosad on hand", "step_type": "prep", "lead_days": 7},
-        {"name": "Soap-flush test #1", "step_type": "follow_up", "lead_days": 0},
-        {"name": "Soap-flush test #2", "step_type": "follow_up", "lead_days": 7},
-        {"name": "Soap-flush test #3", "step_type": "follow_up", "lead_days": 14},
-        {"name": "Soap-flush test #4", "step_type": "follow_up", "lead_days": 21},
-        {"name": "Soap-flush test #5", "step_type": "follow_up", "lead_days": 28},
-        {"name": "Soap-flush test #6", "step_type": "follow_up", "lead_days": 35}
+        {
+          "name": "Have bifenthrin or spinosad on hand",
+          "step_type": "prep",
+          "lead_days": 7
+        },
+        {
+          "name": "Soap-flush test #1",
+          "step_type": "follow_up",
+          "lead_days": 0
+        },
+        {
+          "name": "Soap-flush test #2",
+          "step_type": "follow_up",
+          "lead_days": 7
+        },
+        {
+          "name": "Soap-flush test #3",
+          "step_type": "follow_up",
+          "lead_days": 14
+        },
+        {
+          "name": "Soap-flush test #4",
+          "step_type": "follow_up",
+          "lead_days": 21
+        },
+        {
+          "name": "Soap-flush test #5",
+          "step_type": "follow_up",
+          "lead_days": 28
+        },
+        {
+          "name": "Soap-flush test #6",
+          "step_type": "follow_up",
+          "lead_days": 35
+        }
       ]
     },
     {
@@ -80,29 +136,61 @@
         "type": "compound",
         "operator": "AND",
         "conditions": [
-          {"type": "calendar", "after": "2026-09-05"},
+          {
+            "type": "calendar",
+            "after": "2026-09-05"
+          },
           {
             "type": "condition",
             "all": [
-              {"metric": "daily_high", "operator": "<=", "value": 85, "sustained_days": 3}
+              {
+                "metric": "daily_high",
+                "operator": "<=",
+                "value": 85,
+                "sustained_days": 3
+              }
             ]
           }
         ]
       },
       "sort_order": 6,
       "steps": [
-        {"name": "Order tall fescue seed", "step_type": "prep", "lead_days": 21, "description": "Quality blends sell out by September -- order early"},
-        {"name": "Reserve core aerator and order compost", "step_type": "prep", "lead_days": 14},
-        {"name": "Mow low and bag clippings", "step_type": "prep", "lead_days": 2},
-        {"name": "Flag irrigation heads and shallow-bedrock zones", "step_type": "prep", "lead_days": 1, "description": "Screwdriver test: anywhere it won't go 4 inches down gets extra compost"},
-        {"name": "Begin light watering 2x daily until germination", "step_type": "follow_up", "lead_days": 0},
-        {"name": "Reseed dallisgrass kill spots", "step_type": "follow_up", "lead_days": 3},
-        {"name": "First mow of seedlings at 4 inches, cut to 3", "step_type": "follow_up", "lead_days": 30}
-      ],
-      "conditions": [
         {
-          "condition_type": "temperature",
-          "definition": {"metric": "daily_high", "operator": "<=", "value": 85, "sustained_days": 3}
+          "name": "Order tall fescue seed",
+          "step_type": "prep",
+          "lead_days": 21,
+          "description": "Quality blends sell out by September -- order early"
+        },
+        {
+          "name": "Reserve core aerator and order compost",
+          "step_type": "prep",
+          "lead_days": 14
+        },
+        {
+          "name": "Mow low and bag clippings",
+          "step_type": "prep",
+          "lead_days": 2
+        },
+        {
+          "name": "Flag irrigation heads and shallow-bedrock zones",
+          "step_type": "prep",
+          "lead_days": 1,
+          "description": "Screwdriver test: anywhere it won't go 4 inches down gets extra compost"
+        },
+        {
+          "name": "Begin light watering 2x daily until germination",
+          "step_type": "follow_up",
+          "lead_days": 0
+        },
+        {
+          "name": "Reseed dallisgrass kill spots",
+          "step_type": "follow_up",
+          "lead_days": 3
+        },
+        {
+          "name": "First mow of seedlings at 4 inches, cut to 3",
+          "step_type": "follow_up",
+          "lead_days": 30
         }
       ]
     },
@@ -119,8 +207,17 @@
       },
       "sort_order": 7,
       "steps": [
-        {"name": "Buy fall fertilizer per soil test result", "step_type": "prep", "lead_days": 7, "description": "PGF Complete 16-0-8 if P is high; 16-4-8 only if the test says P is actually low"},
-        {"name": "Water in", "step_type": "follow_up", "lead_days": 1}
+        {
+          "name": "Buy fall fertilizer per soil test result",
+          "step_type": "prep",
+          "lead_days": 7,
+          "description": "PGF Complete 16-0-8 if P is high; 16-4-8 only if the test says P is actually low"
+        },
+        {
+          "name": "Water in",
+          "step_type": "follow_up",
+          "lead_days": 1
+        }
       ]
     },
     {
@@ -132,23 +229,29 @@
         "type": "compound",
         "operator": "AND",
         "conditions": [
-          {"type": "calendar", "after": "2026-11-01"},
+          {
+            "type": "calendar",
+            "after": "2026-11-01"
+          },
           {
             "type": "condition",
             "all": [
-              {"metric": "daily_low", "operator": "<=", "value": 32, "sustained_days": 1}
+              {
+                "metric": "daily_low",
+                "operator": "<=",
+                "value": 32,
+                "sustained_days": 1
+              }
             ]
           }
         ]
       },
       "sort_order": 8,
       "steps": [
-        {"name": "Check fertilizer inventory", "step_type": "prep", "lead_days": 7}
-      ],
-      "conditions": [
         {
-          "condition_type": "temperature",
-          "definition": {"metric": "daily_low", "operator": "<=", "value": 32, "sustained_days": 1}
+          "name": "Check fertilizer inventory",
+          "step_type": "prep",
+          "lead_days": 7
         }
       ]
     },
@@ -161,23 +264,30 @@
         "type": "compound",
         "operator": "AND",
         "conditions": [
-          {"type": "calendar", "after": "2026-11-10"},
+          {
+            "type": "calendar",
+            "after": "2026-11-10"
+          },
           {
             "type": "condition",
             "all": [
-              {"metric": "daily_high", "operator": ">=", "value": 50, "sustained_days": 1}
+              {
+                "metric": "daily_high",
+                "operator": ">=",
+                "value": 50,
+                "sustained_days": 1
+              }
             ]
           }
         ]
       },
       "sort_order": 9,
       "steps": [
-        {"name": "Buy selective broadleaf herbicide safe for fescue", "step_type": "prep", "lead_days": 7, "description": "2,4-D / dicamba / MCPP three-way mix; verify seedlings mowed 4x first"}
-      ],
-      "conditions": [
         {
-          "condition_type": "temperature",
-          "definition": {"metric": "daily_high", "operator": ">=", "value": 50, "sustained_days": 1}
+          "name": "Buy selective broadleaf herbicide safe for fescue",
+          "step_type": "prep",
+          "lead_days": 7,
+          "description": "2,4-D / dicamba / MCPP three-way mix; verify seedlings mowed 4x first"
         }
       ]
     },
@@ -186,10 +296,17 @@
       "description": "Light nitrogen ~2 weeks before the green-up push. Late February in Murfreesboro.",
       "group_name": "Fertility",
       "trigger_type": "calendar",
-      "trigger_def": {"type": "calendar", "date": "2027-02-20"},
+      "trigger_def": {
+        "type": "calendar",
+        "date": "2027-02-20"
+      },
       "sort_order": 10,
       "steps": [
-        {"name": "Check fertilizer inventory", "step_type": "prep", "lead_days": 7}
+        {
+          "name": "Check fertilizer inventory",
+          "step_type": "prep",
+          "lead_days": 7
+        }
       ]
     },
     {
@@ -201,22 +318,24 @@
         "type": "compound",
         "operator": "AND",
         "conditions": [
-          {"type": "calendar", "after": "2027-02-15"},
+          {
+            "type": "calendar",
+            "after": "2027-02-15"
+          },
           {
             "type": "condition",
             "all": [
-              {"metric": "daily_high", "operator": ">=", "value": 50, "sustained_days": 1}
+              {
+                "metric": "daily_high",
+                "operator": ">=",
+                "value": 50,
+                "sustained_days": 1
+              }
             ]
           }
         ]
       },
-      "sort_order": 11,
-      "conditions": [
-        {
-          "condition_type": "temperature",
-          "definition": {"metric": "daily_high", "operator": ">=", "value": 50, "sustained_days": 1}
-        }
-      ]
+      "sort_order": 11
     },
     {
       "name": "Spring Pre-Emergent App 1",
@@ -227,25 +346,39 @@
         "type": "compound",
         "operator": "AND",
         "conditions": [
-          {"type": "calendar", "after": "2027-02-15"},
+          {
+            "type": "calendar",
+            "after": "2027-02-15"
+          },
           {
             "type": "condition",
             "all": [
-              {"metric": "daily_high", "operator": ">=", "value": 55, "sustained_days": 3}
+              {
+                "metric": "daily_high",
+                "operator": ">=",
+                "value": 55,
+                "sustained_days": 3
+              }
             ]
           }
         ]
       },
       "sort_order": 12,
       "steps": [
-        {"name": "Buy prodiamine", "step_type": "prep", "lead_days": 14},
-        {"name": "Calibrate spreader", "step_type": "prep", "lead_days": 1},
-        {"name": "Water in 0.5 inch", "step_type": "follow_up", "lead_days": 1}
-      ],
-      "conditions": [
         {
-          "condition_type": "temperature",
-          "definition": {"metric": "daily_high", "operator": ">=", "value": 55, "sustained_days": 3}
+          "name": "Buy prodiamine",
+          "step_type": "prep",
+          "lead_days": 14
+        },
+        {
+          "name": "Calibrate spreader",
+          "step_type": "prep",
+          "lead_days": 1
+        },
+        {
+          "name": "Water in 0.5 inch",
+          "step_type": "follow_up",
+          "lead_days": 1
         }
       ]
     },
@@ -262,8 +395,16 @@
       },
       "sort_order": 13,
       "steps": [
-        {"name": "Check lawn for emerged crabgrass, buy dithiopyr if present", "step_type": "prep", "lead_days": 7},
-        {"name": "Water in 0.5 inch", "step_type": "follow_up", "lead_days": 1}
+        {
+          "name": "Check lawn for emerged crabgrass, buy dithiopyr if present",
+          "step_type": "prep",
+          "lead_days": 7
+        },
+        {
+          "name": "Water in 0.5 inch",
+          "step_type": "follow_up",
+          "lead_days": 1
+        }
       ]
     },
     {
@@ -271,11 +412,22 @@
       "description": "Chlorantraniliprole (GrubEx) ahead of June/July beetle egg-lay. Late April to May window. 2027 onward, annual.",
       "group_name": "Pests & Disease",
       "trigger_type": "calendar",
-      "trigger_def": {"type": "calendar", "date": "2027-04-25"},
+      "trigger_def": {
+        "type": "calendar",
+        "date": "2027-04-25"
+      },
       "sort_order": 14,
       "steps": [
-        {"name": "Buy chlorantraniliprole (GrubEx)", "step_type": "prep", "lead_days": 14},
-        {"name": "Water in 0.5 inch", "step_type": "follow_up", "lead_days": 1}
+        {
+          "name": "Buy chlorantraniliprole (GrubEx)",
+          "step_type": "prep",
+          "lead_days": 14
+        },
+        {
+          "name": "Water in 0.5 inch",
+          "step_type": "follow_up",
+          "lead_days": 1
+        }
       ]
     }
   ]

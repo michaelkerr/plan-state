@@ -38,7 +38,7 @@ plan-state/
 ├── plansync/
 │   └── engine.py               # Shared engine: get_db, log_change, cascade, trigger/step date math
 ├── mcp-server/
-│   ├── server.py               # MCP server (11 tools) over stdio JSON-RPC
+│   ├── server.py               # MCP server (10 tools) over stdio JSON-RPC
 │   └── requirements.txt        # mcp>=1.0.0
 ├── sync/
 │   ├── daily_sync.py           # Deterministic sync pipeline (weather, conditions, triggers, cascade, overdue)
@@ -77,7 +77,8 @@ plan-state/
 - Activities carry an optional free-form `group_name` for within-domain bundling (crop, bed, species). Display/organization only -- trigger logic comes from dependency chains, never groups
 - A domain = one location/weather context. Activity vs step: needs its own trigger (date, weather, dependency) → activity; fixed-offset chore around a triggered event → step
 - weather_log assumes ONE row per location per day (sustained_days reads the last N rows). Daily high/low are derived from the 3-hourly forecast via derive_daily_range(), not the snapshot. After ad-hoc manual sync runs, delete duplicate same-day rows
-- Every condition or compound activity must include a matching `conditions` array -- the cron evaluates condition triggers from the conditions table, not trigger_def
+- Conditions rows are DERIVED from trigger_def condition leaves at load/update time (engine.derive_conditions); definitions with an explicit `conditions` array are rejected. The conditions table is an evaluation cache (is_met/current_value), never authored directly
+- One authoring path: load_domain (new domain) / add_activities (grow a domain, including single activities); one modification path: update_activity / complete_activity / defer_activity. The single-shot create_domain and create_activity tools were removed (Step 22)
 - Shared logic lives in `plansync/engine.py` (get_db, log_change, cascade_step_dates, compute_trigger_date, step_due_date, row_to_dict); server.py, daily_sync.py, and evening_nudge.py import it and must not define local copies (enforced by tests/test_engine_extraction.py). DB path and client identity resolve from env (`PLANSYNC_DB`, `PLANSYNC_CLIENT`) at call time
 - activity_log source attribution: `cron` (sync pipeline, passed explicitly), `hermes`/`claude` (via PLANSYNC_CLIENT env on the MCP server), `human` (reserved)
 
