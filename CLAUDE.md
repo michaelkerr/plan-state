@@ -21,7 +21,7 @@ A condition-aware activity orchestrator for personal life domains (lawn care, ga
 
 ## Tech stack
 - **Language**: Python 3 (no type hints in existing code)
-- **Database**: SQLite 3, DELETE journal mode (WAL is unreliable over the exFAT/VirtioFS mount), foreign keys enabled
+- **Database**: SQLite 3, WAL journal mode, lives at `/opt/data/plansync/plansync.db` (APFS-backed Hermes data dir -- NEVER on the exFAT/VirtioFS repo mount, where WAL fails), foreign keys enabled
 - **MCP server**: `mcp>=1.0.0` (stdio JSON-RPC)
 - **HTTP clients**: `requests` (weather API)
 - **Weather**: OpenWeatherMap API (current + forecast)
@@ -61,13 +61,13 @@ plan-state/
         └── v2-signals-boundaries-prd.md   # Shelved v2 architecture (archived 2026-07-19; revisit only if a full season surfaces a concrete v1 limitation)
 ```
 
-**Sibling repo**: `../gideon/` contains Hermes infrastructure (docker-compose.yml, .env, config.yaml). Plan-state registers itself into Gideon via `register.sh`.
+**Sibling repo**: `../gideon/` contains Hermes infrastructure (docker-compose.yml, .env). Plan-state registers itself into Gideon via `register.sh`. The LIVE Gideon config.yaml and data dir are at `$GIDEON_DATA_PATH` (/Users/michaelkerr/gideon-data, mounted at /opt/data) -- `../gideon/data/` is only the nightly backup target (mounted at /opt/data-backup); editing config there does nothing.
 
 **Volume mounts**: The entire plan-state repo is volume-mounted into the container at `/opt/plansync/`. Skills are loaded via Hermes `external_dirs` (live edits). MCP server and sync code are accessed directly via the mount (live edits). Scripts are thin wrappers copied by `register.sh` — they delegate to the volume-mounted code, so the actual logic is still live-editable. The MCP server is configured in Gideon's `config.yaml`; `register.sh` handles one-time setup (DB init, pip deps, cron registration) plus script copying.
 
 ## Conventions
 - Database IDs are 12-char hex strings from `uuid4().hex[:12]`
-- All DB connections set `PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON`; never `journal_mode=WAL` (breaks over the exFAT/VirtioFS mount, see 2026-07-11 incident)
+- All DB connections go through `engine.get_db()` (`busy_timeout=5000`, `foreign_keys=ON`). Journal mode is a persistent DB property set at init/migration: WAL at the APFS location. Never create or move the DB onto the exFAT/VirtioFS mount (WAL breaks there, see 2026-07-11 incident)
 - JSON fields in SQLite are stored as TEXT, deserialized on read via `row_to_dict()`
 - MCP tool responses are JSON wrapped in `types.TextContent`
 - Trigger definitions are JSON objects with a `type` field: `calendar`, `condition`, `dependency`, `compound`
@@ -76,7 +76,7 @@ plan-state/
 - Activity log captures all state changes with source attribution (`cron`, `hermes`)
 - Activities carry an optional free-form `group_name` for within-domain bundling (crop, bed, species). Display/organization only -- trigger logic comes from dependency chains, never groups
 - A domain = one location/weather context. Activity vs step: needs its own trigger (date, weather, dependency) → activity; fixed-offset chore around a triggered event → step
-- weather_log assumes ONE row per location per day (sustained_days reads the last N rows). Daily high/low are derived from the 3-hourly forecast via derive_daily_range(), not the snapshot. After ad-hoc manual sync runs, delete duplicate same-day rows
+- weather_log holds ONE row per location per local day, enforced by `UNIQUE(location, weather_date)` -- the upsert is `INSERT ... ON CONFLICT DO UPDATE`, so ad-hoc manual sync runs refresh rather than duplicate. Daily high/low are derived from the 3-hourly forecast via derive_daily_range(), not the snapshot
 - Conditions rows are DERIVED from trigger_def condition leaves at load/update time (engine.derive_conditions); definitions with an explicit `conditions` array are rejected. The conditions table is an evaluation cache (is_met/current_value), never authored directly
 - One authoring path: load_domain (new domain) / add_activities (grow a domain, including single activities); one modification path: update_activity / complete_activity / defer_activity. The single-shot create_domain and create_activity tools were removed (Step 22)
 - Deferral is a date move, not a status: defer_activity requires new_date, rewrites trigger_def via engine.defer_trigger_def (calendar date moved, compound calendar leg moved, condition/dependency wrapped with an earliest-date gate), and returns the activity to 'watching' so the cron re-fires it. There is no 'deferred' status

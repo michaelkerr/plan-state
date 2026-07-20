@@ -11,7 +11,7 @@ import sys
 SYNC_SCRIPT = "/opt/plansync/sync/daily_sync.py"
 
 env = os.environ.copy()
-env.setdefault("PLANSYNC_DB", "/opt/plansync/plansync.db")
+env.setdefault("PLANSYNC_DB", "/opt/data/plansync/plansync.db")
 env.setdefault("PLANSYNC_OUTPUT_DIR", "/opt/plansync/sync-output")
 
 result = subprocess.run(

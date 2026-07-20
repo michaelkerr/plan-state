@@ -11,7 +11,7 @@ import sys
 NUDGE_SCRIPT = "/opt/plansync/sync/evening_nudge.py"
 
 env = os.environ.copy()
-env.setdefault("PLANSYNC_DB", "/opt/plansync/plansync.db")
+env.setdefault("PLANSYNC_DB", "/opt/data/plansync/plansync.db")
 
 result = subprocess.run(
     [sys.executable, NUDGE_SCRIPT],

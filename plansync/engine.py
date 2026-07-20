@@ -7,7 +7,7 @@ import os
 import sqlite3
 from datetime import date, timedelta
 
-DEFAULT_DB_PATH = "/opt/plansync/plansync.db"
+DEFAULT_DB_PATH = "/opt/data/plansync/plansync.db"
 
 
 def db_path():
@@ -17,7 +17,9 @@ def db_path():
 def get_db():
     conn = sqlite3.connect(db_path())
     conn.row_factory = sqlite3.Row
-    # No WAL here: unsupported on the exFAT/VirtioFS mount (see init-db.py)
+    # Journal mode is a persistent DB property: WAL, set at init/migration time
+    # (the DB lives on APFS under /opt/data -- never move it back to the
+    # exFAT/VirtioFS mount, where WAL fails sporadically with SQLITE_CANTOPEN)
     conn.execute("PRAGMA busy_timeout=5000")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn

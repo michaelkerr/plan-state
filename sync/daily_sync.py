@@ -143,25 +143,19 @@ def pull_weather(conn, summary):
 
 
 def upsert_weather_row(conn, loc, temp_high, temp_low, conditions, precipitation, forecast_json):
-    """One weather row per location per local day. A second run the same day
-    (duplicate cron fire, manual verification) refreshes the row instead of
-    inserting -- sustained_days trigger evaluation counts rows as days."""
-    existing = conn.execute(
-        "SELECT id FROM weather_log WHERE location=? AND date(recorded_at, 'localtime') = date('now', 'localtime')",
-        (loc,),
-    ).fetchone()
-    if existing:
-        conn.execute(
-            """UPDATE weather_log SET temp_high=?, temp_low=?, conditions=?, precipitation=?,
-               forecast_json=?, recorded_at=CURRENT_TIMESTAMP WHERE id=?""",
-            (temp_high, temp_low, conditions, precipitation, forecast_json, existing["id"]),
-        )
-    else:
-        conn.execute(
-            """INSERT INTO weather_log (location, temp_high, temp_low, conditions, precipitation, forecast_json)
-               VALUES (?,?,?,?,?,?)""",
-            (loc, temp_high, temp_low, conditions, precipitation, forecast_json),
-        )
+    """One weather row per location per local day, enforced by
+    UNIQUE(location, weather_date). A second run the same day (duplicate cron
+    fire, manual verification) refreshes the row instead of inserting --
+    sustained_days trigger evaluation counts rows as days."""
+    conn.execute(
+        """INSERT INTO weather_log (location, weather_date, temp_high, temp_low, conditions, precipitation, forecast_json)
+           VALUES (?,?,?,?,?,?,?)
+           ON CONFLICT(location, weather_date) DO UPDATE SET
+             temp_high=excluded.temp_high, temp_low=excluded.temp_low,
+             conditions=excluded.conditions, precipitation=excluded.precipitation,
+             forecast_json=excluded.forecast_json, recorded_at=CURRENT_TIMESTAMP""",
+        (loc, TODAY.isoformat(), temp_high, temp_low, conditions, precipitation, forecast_json),
+    )
 
 
 # ── Step 2: Condition Evaluation ─────────────────────────────

@@ -54,12 +54,14 @@ CREATE TABLE IF NOT EXISTS conditions (
 CREATE TABLE IF NOT EXISTS weather_log (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   location        TEXT NOT NULL,
+  weather_date    TEXT NOT NULL,          -- local calendar day; one row per location per day
   recorded_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
   temp_high       REAL,
   temp_low        REAL,
   conditions      TEXT,
   precipitation   REAL,
-  forecast_json   JSON
+  forecast_json   JSON,
+  UNIQUE(location, weather_date)
 );
 
 CREATE TABLE IF NOT EXISTS activity_log (

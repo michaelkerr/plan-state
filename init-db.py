@@ -5,7 +5,7 @@ import os
 import sqlite3
 import sys
 
-DB_PATH = os.environ.get("PLANSYNC_DB", "/opt/plansync/plansync.db")
+DB_PATH = os.environ.get("PLANSYNC_DB", "/opt/data/plansync/plansync.db")
 SCHEMA_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "schema.sql")
 
 
@@ -18,9 +18,9 @@ def main():
 
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
-    # DELETE, not WAL: the db lives on an exFAT bind mount (Docker VirtioFS),
-    # where WAL's shared-memory files fail sporadically with SQLITE_CANTOPEN.
-    conn.execute("PRAGMA journal_mode=DELETE")
+    # WAL is safe at the APFS-backed default path (/opt/data). Do NOT init a
+    # DB on the exFAT/VirtioFS mount, where WAL fails with SQLITE_CANTOPEN.
+    conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")
     conn.execute("PRAGMA foreign_keys=ON")
 

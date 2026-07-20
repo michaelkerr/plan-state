@@ -185,9 +185,9 @@ class TestEndToEndFiring:
         load(DOMAIN)
         for day_offset in (2, 1, 0):
             db.execute(
-                "INSERT INTO weather_log (location, temp_high, temp_low, recorded_at) "
-                "VALUES ('Murfreesboro,TN,US', 80, 65, datetime('now', ?))",
-                (f"-{day_offset} days",),
+                "INSERT INTO weather_log (location, weather_date, temp_high, temp_low, recorded_at) "
+                "VALUES ('Murfreesboro,TN,US', date('now', ?), 80, 65, datetime('now', ?))",
+                (f"-{day_offset} days", f"-{day_offset} days"),
             )
         db.commit()
         summary = daily_sync.SyncSummary()

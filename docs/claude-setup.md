@@ -69,7 +69,7 @@ wrapper is a small addition.
 2. Make any write from Claude (e.g. `add_observation`), then check attribution:
 
 ```
-docker exec -i gideon-gateway sqlite3 /opt/plansync/plansync.db \
+docker exec -i gideon-gateway sqlite3 /opt/data/plansync/plansync.db \
   "SELECT timestamp, item_type, action, source FROM activity_log ORDER BY id DESC LIMIT 5;"
 ```
 

@@ -6,7 +6,7 @@ import os
 import sqlite3
 from datetime import date, timedelta
 
-DB_PATH = os.environ.get("PLANSYNC_DB", "/opt/plansync/plansync.db")
+DB_PATH = os.environ.get("PLANSYNC_DB", "/opt/data/plansync/plansync.db")
 OUTPUT_DIR = os.environ.get("PLANSYNC_OUTPUT_DIR", "/opt/plansync/sync-output")
 TODAY = date.today().isoformat()
 WEEK_CUTOFF = (date.today() + timedelta(days=7)).isoformat()

@@ -64,7 +64,8 @@ for script in "$SCRIPT_DIR"/scripts/*.py "$SCRIPT_DIR"/scripts/*.sh; do
 done
 
 # ── 4. Initialize database ──────────────────────────────────
-if docker exec "$CONTAINER" test -f /opt/plansync/plansync.db; then
+# Lives on the APFS-backed /opt/data mount (WAL-safe), NOT /opt/plansync (exFAT)
+if docker exec "$CONTAINER" test -f /opt/data/plansync/plansync.db; then
     echo "[4/6] Database already exists, skipping init."
 else
     echo "[4/6] Initializing SQLite database..."
