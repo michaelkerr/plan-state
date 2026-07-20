@@ -42,7 +42,7 @@ for skill in plansync.md plansync-briefing.md domain-authoring.md; do
         echo "  Removed old skill copy: $skill"
     fi
 done
-for script in daily-sync.py briefing-context.py briefing-context.sh; do
+for script in daily-sync.py briefing-context.py briefing-context.sh evening-nudge.py; do
     target="/opt/data/scripts/$script"
     if docker exec "$CONTAINER" test -L "$target" 2>/dev/null; then
         docker exec "$CONTAINER" rm "$target"
@@ -104,6 +104,16 @@ else
         --name "morning-briefing"
 fi
 
+if echo "$existing_jobs" | grep -q "evening-nudge"; then
+    echo "  evening-nudge cron already exists"
+else
+    docker exec "$CONTAINER" hermes cron create "0 17 * * *" \
+        --no-agent \
+        --script evening-nudge.py \
+        --deliver telegram \
+        --name "evening-nudge"
+fi
+
 echo ""
 echo "=== Registration Complete ==="
 echo ""
@@ -116,4 +126,4 @@ echo "Verify:"
 echo "  docker exec -it $CONTAINER hermes chat -q 'Use the plansync tools to list domains'"
 echo ""
 echo "Required env vars in gideon/.env:"
-echo "  TODOIST_API_KEY, OPENWEATHERMAP_API_KEY"
+echo "  OPENWEATHERMAP_API_KEY"

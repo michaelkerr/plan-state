@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Deterministic daily sync: weather pull, condition eval, trigger fire,
-date cascade, Todoist sync, summary output. Zero LLM tokens.
+date cascade, overdue check, summary output. Zero LLM tokens.
 """
 
 import json
@@ -17,10 +17,6 @@ except ImportError:  # absent in test/tooling environments; required in the cont
 
 DB_PATH = os.environ.get("PLANSYNC_DB", "/opt/plansync/plansync.db")
 OWM_KEY = os.environ.get("OPENWEATHERMAP_API_KEY", "")
-TODOIST_KEY = os.environ.get("TODOIST_API_KEY", "")
-# Watching activities dated within this window sync to Todoist ahead of their
-# trigger, matching the briefing's 7-day view (see enqueue_todoist_items)
-TODOIST_LOOKAHEAD_DAYS = int(os.environ.get("TODOIST_LOOKAHEAD_DAYS", "7"))
 OUTPUT_DIR = os.environ.get("PLANSYNC_OUTPUT_DIR", "/opt/plansync/sync-output")
 
 TODAY = date.today()
@@ -32,17 +28,12 @@ class SyncSummary:
     def __init__(self):
         self.triggers_fired = []
         self.dates_cascaded = []
-        self.todoist_created = []
-        self.todoist_updated = []
-        self.todoist_completed = []
         self.overdue = []
         self.errors = []
 
     def is_empty(self):
         return not any([
-            self.triggers_fired, self.dates_cascaded,
-            self.todoist_created, self.todoist_updated,
-            self.todoist_completed, self.overdue,
+            self.triggers_fired, self.dates_cascaded, self.overdue,
         ])
 
     def to_dict(self):
@@ -50,9 +41,6 @@ class SyncSummary:
             "date": TODAY.isoformat(),
             "triggers_fired": self.triggers_fired,
             "dates_cascaded": self.dates_cascaded,
-            "todoist_created": self.todoist_created,
-            "todoist_updated": self.todoist_updated,
-            "todoist_completed": self.todoist_completed,
             "overdue": self.overdue,
             "errors": self.errors,
         }
@@ -70,9 +58,6 @@ class SyncSummary:
         lines.append(f"dates_cascaded: {len(self.dates_cascaded)}")
         for d in self.dates_cascaded:
             lines.append(f'  - "{d["name"]}" moved to {d["new_date"]} (was {d["old_date"]})')
-        lines.append(f"todoist_created: {len(self.todoist_created)}")
-        lines.append(f"todoist_updated: {len(self.todoist_updated)}")
-        lines.append(f"todoist_completed: {len(self.todoist_completed)}")
         lines.append(f"overdue: {len(self.overdue)}")
         for o in self.overdue:
             lines.append(f'  - "{o["name"]}" was due {o["due_date"]}')
@@ -501,239 +486,7 @@ def check_overdue(conn, summary):
         })
 
 
-# ── Step 6: Todoist Sync ─────────────────────────────────────
-
-# Unified v1 API -- REST v2 was sunset (410 Gone) July 2026
-TODOIST_API = "https://api.todoist.com/api/v1"
-
-
-def task_content(group_name, item_name):
-    return f"{group_name}: {item_name}" if group_name else item_name
-
-
-def task_is_completed(task):
-    # v1 uses "checked"; tolerate the old REST v2 "is_completed" just in case
-    return bool(task.get("checked") or task.get("is_completed"))
-
-
-def enqueue_todoist_items(conn):
-    """Reconciliation pass: queue Todoist task creation for anything actionable
-    that has no sync row yet. Idempotent; runs regardless of API availability so
-    the queue is ready when sync happens. Nothing else writes pending_create.
-
-    Fired activities (preparing/active) enqueue with all their dated steps.
-    Watching activities dated within TODOIST_LOOKAHEAD_DAYS also enqueue, with
-    only their steps due inside the horizon, so Todoist shows the same week
-    ahead as the Telegram briefing; the rest arrives when the trigger fires."""
-    horizon = (TODAY + timedelta(days=TODOIST_LOOKAHEAD_DAYS)).isoformat()
-    conn.execute(
-        """INSERT INTO todoist_sync (plan_item_id, plan_item_type, sync_status)
-           SELECT a.id, 'activity', 'pending_create'
-           FROM activities a
-           WHERE (a.status IN ('preparing','active')
-                  OR (a.status = 'watching' AND a.trigger_date IS NOT NULL
-                      AND a.trigger_date <= :horizon))
-             AND NOT EXISTS (
-               SELECT 1 FROM todoist_sync ts
-               WHERE ts.plan_item_id = a.id AND ts.plan_item_type = 'activity')""",
-        {"horizon": horizon},
-    )
-    conn.execute(
-        """INSERT INTO todoist_sync (plan_item_id, plan_item_type, sync_status)
-           SELECT s.id, 'step', 'pending_create'
-           FROM steps s
-           JOIN activities a ON s.activity_id = a.id
-           WHERE (a.status IN ('preparing','active')
-                  OR (a.status = 'watching' AND a.trigger_date IS NOT NULL
-                      AND a.trigger_date <= :horizon AND s.due_date <= :horizon))
-             AND s.status IN ('pending','due')
-             AND s.due_date IS NOT NULL
-             AND NOT EXISTS (
-               SELECT 1 FROM todoist_sync ts
-               WHERE ts.plan_item_id = s.id AND ts.plan_item_type = 'step')""",
-        {"horizon": horizon},
-    )
-
-
-def todoist_sync(conn, summary):
-    if not TODOIST_KEY:
-        summary.errors.append("TODOIST_API_KEY not set, skipping Todoist sync")
-        return
-    if requests is None:
-        summary.errors.append("requests not installed, skipping Todoist sync")
-        return
-
-    headers = {"Authorization": f"Bearer {TODOIST_KEY}", "Content-Type": "application/json"}
-
-    _todoist_create(conn, headers, summary)
-    _todoist_update(conn, headers, summary)
-    _todoist_close(conn, headers, summary)
-    _todoist_poll_completions(conn, headers, summary)
-
-
-def _get_or_create_project(headers, project_name):
-    cursor = None
-    while True:
-        params = {"limit": 200}
-        if cursor:
-            params["cursor"] = cursor
-        resp = requests.get(f"{TODOIST_API}/projects", headers=headers, params=params, timeout=15)
-        resp.raise_for_status()
-        data = resp.json()
-        for p in data.get("results", []):
-            if p["name"] == project_name:
-                return p["id"]
-        cursor = data.get("next_cursor")
-        if not cursor:
-            break
-
-    resp = requests.post(
-        f"{TODOIST_API}/projects", headers=headers, json={"name": project_name}, timeout=15,
-    )
-    resp.raise_for_status()
-    return resp.json()["id"]
-
-
-def _todoist_create(conn, headers, summary):
-    pending = conn.execute(
-        """SELECT ts.*, COALESCE(a.name, s.name) as item_name,
-                  COALESCE(a.description, s.description) as item_desc,
-                  COALESCE(a.trigger_date, s.due_date) as item_due,
-                  COALESCE(a.group_name, (SELECT group_name FROM activities WHERE id = s.activity_id)) as group_name,
-                  d.name as domain_name
-           FROM todoist_sync ts
-           LEFT JOIN activities a ON ts.plan_item_id = a.id AND ts.plan_item_type = 'activity'
-           LEFT JOIN steps s ON ts.plan_item_id = s.id AND ts.plan_item_type = 'step'
-           LEFT JOIN domains d ON COALESCE(a.domain_id, (SELECT domain_id FROM activities WHERE id = s.activity_id)) = d.id
-           WHERE ts.sync_status = 'pending_create'"""
-    ).fetchall()
-
-    for item in pending:
-        due = item["item_due"]
-        if not due:
-            continue
-
-        project_name = item["domain_name"] or "Plan Sync"
-        try:
-            project_id = _get_or_create_project(headers, project_name)
-            task_data = {
-                "content": task_content(item["group_name"], item["item_name"]),
-                "description": item["item_desc"] or "",
-                "due_date": due,
-                "project_id": project_id,
-            }
-            resp = requests.post(f"{TODOIST_API}/tasks", headers=headers, json=task_data, timeout=15)
-            resp.raise_for_status()
-            task = resp.json()
-
-            conn.execute(
-                "UPDATE todoist_sync SET todoist_task_id=?, todoist_project=?, last_synced=?, sync_status='synced' WHERE plan_item_id=? AND plan_item_type=?",
-                (task["id"], project_id, NOW.isoformat(), item["plan_item_id"], item["plan_item_type"]),
-            )
-            summary.todoist_created.append(item["item_name"])
-        except Exception as e:
-            summary.errors.append(f"Todoist create failed for {item['item_name']}: {e}")
-
-
-def _todoist_update(conn, headers, summary):
-    pending = conn.execute(
-        """SELECT ts.*, COALESCE(a.name, s.name) as item_name,
-                  COALESCE(a.trigger_date, s.due_date) as item_due
-           FROM todoist_sync ts
-           LEFT JOIN activities a ON ts.plan_item_id = a.id AND ts.plan_item_type = 'activity'
-           LEFT JOIN steps s ON ts.plan_item_id = s.id AND ts.plan_item_type = 'step'
-           WHERE ts.sync_status = 'pending_update' AND ts.todoist_task_id IS NOT NULL"""
-    ).fetchall()
-
-    for item in pending:
-        try:
-            task_data = {"due_date": item["item_due"]}
-            resp = requests.post(
-                f"{TODOIST_API}/tasks/{item['todoist_task_id']}",
-                headers=headers, json=task_data, timeout=15,
-            )
-            resp.raise_for_status()
-
-            conn.execute(
-                "UPDATE todoist_sync SET last_synced=?, sync_status='synced' WHERE plan_item_id=? AND plan_item_type=?",
-                (NOW.isoformat(), item["plan_item_id"], item["plan_item_type"]),
-            )
-            summary.todoist_updated.append(item["item_name"])
-        except Exception as e:
-            summary.errors.append(f"Todoist update failed for {item['item_name']}: {e}")
-
-
-def _todoist_close(conn, headers, summary):
-    pending = conn.execute(
-        """SELECT ts.*, COALESCE(a.name, s.name) as item_name
-           FROM todoist_sync ts
-           LEFT JOIN activities a ON ts.plan_item_id = a.id AND ts.plan_item_type = 'activity'
-           LEFT JOIN steps s ON ts.plan_item_id = s.id AND ts.plan_item_type = 'step'
-           WHERE ts.sync_status = 'pending_close' AND ts.todoist_task_id IS NOT NULL"""
-    ).fetchall()
-
-    for item in pending:
-        try:
-            resp = requests.post(
-                f"{TODOIST_API}/tasks/{item['todoist_task_id']}/close",
-                headers=headers, timeout=15,
-            )
-            resp.raise_for_status()
-
-            conn.execute(
-                "UPDATE todoist_sync SET last_synced=?, sync_status='synced' WHERE plan_item_id=? AND plan_item_type=?",
-                (NOW.isoformat(), item["plan_item_id"], item["plan_item_type"]),
-            )
-            summary.todoist_completed.append(item["item_name"])
-        except Exception as e:
-            summary.errors.append(f"Todoist close failed for {item['item_name']}: {e}")
-
-
-def _todoist_poll_completions(conn, headers, summary):
-    # Skip plan items already completed locally — otherwise every past
-    # completion is re-polled, re-logged, and re-reported on every run.
-    synced = conn.execute(
-        """SELECT ts.*, COALESCE(a.name, s.name) as item_name
-           FROM todoist_sync ts
-           LEFT JOIN activities a ON ts.plan_item_id = a.id AND ts.plan_item_type = 'activity'
-           LEFT JOIN steps s ON ts.plan_item_id = s.id AND ts.plan_item_type = 'step'
-           WHERE ts.sync_status = 'synced' AND ts.todoist_task_id IS NOT NULL
-             AND COALESCE(a.status, s.status) NOT IN ('completed', 'skipped')"""
-    ).fetchall()
-
-    for item in synced:
-        try:
-            resp = requests.get(
-                f"{TODOIST_API}/tasks/{item['todoist_task_id']}",
-                headers=headers, timeout=15,
-            )
-            if resp.status_code == 404:
-                continue
-            resp.raise_for_status()
-            task = resp.json()
-
-            if task_is_completed(task):
-                now_str = NOW.isoformat()
-                if item["plan_item_type"] == "activity":
-                    conn.execute(
-                        "UPDATE activities SET status='completed', completed_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND status != 'completed'",
-                        (now_str, item["plan_item_id"]),
-                    )
-                    log_change(conn, "activity", item["plan_item_id"], "status_change",
-                                {"status": "active"}, {"status": "completed", "source": "todoist"})
-                elif item["plan_item_type"] == "step":
-                    conn.execute(
-                        "UPDATE steps SET status='completed', completed_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND status != 'completed'",
-                        (now_str, item["plan_item_id"]),
-                    )
-                    log_change(conn, "step", item["plan_item_id"], "status_change",
-                                {"status": "due"}, {"status": "completed", "source": "todoist"})
-                summary.todoist_completed.append(item["item_name"])
-        except Exception as e:
-            summary.errors.append(f"Todoist poll failed for {item['plan_item_id']}: {e}")
-
-
-# ── Step 7: Summary Output ──────────────────────────────────
+# ── Step 6: Summary Output ──────────────────────────────────
 
 def save_output(summary):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -765,14 +518,6 @@ def main():
         reestimate_dates(conn, summary)
         conn.commit()
 
-        enqueue_todoist_items(conn)
-        conn.commit()
-
-        todoist_sync(conn, summary)
-        conn.commit()
-
-        # After Todoist sync so completions detected this run are not
-        # reported (and re-marked) as overdue.
         check_overdue(conn, summary)
         conn.commit()
 

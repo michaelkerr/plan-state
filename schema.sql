@@ -65,17 +65,6 @@ CREATE TABLE IF NOT EXISTS weather_log (
   forecast_json   JSON
 );
 
-CREATE TABLE IF NOT EXISTS todoist_sync (
-  plan_item_id    TEXT NOT NULL,
-  plan_item_type  TEXT NOT NULL CHECK(plan_item_type IN ('activity','step')),
-  todoist_task_id TEXT,
-  todoist_project TEXT,
-  last_synced     DATETIME,
-  sync_status     TEXT DEFAULT 'pending_create'
-                    CHECK(sync_status IN ('synced','pending_create','pending_update','pending_close')),
-  PRIMARY KEY (plan_item_id, plan_item_type)
-);
-
 CREATE TABLE IF NOT EXISTS activity_log (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   timestamp       DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -84,7 +73,7 @@ CREATE TABLE IF NOT EXISTS activity_log (
   action          TEXT NOT NULL CHECK(action IN ('status_change','date_cascade','trigger_fire','manual_update','created','observation')),
   old_value       JSON,
   new_value       JSON,
-  source          TEXT NOT NULL CHECK(source IN ('cron','hermes','todoist_webhook'))
+  source          TEXT NOT NULL CHECK(source IN ('cron','hermes'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_activities_domain ON activities(domain_id);
@@ -92,5 +81,4 @@ CREATE INDEX IF NOT EXISTS idx_activities_status ON activities(status);
 CREATE INDEX IF NOT EXISTS idx_steps_activity ON steps(activity_id);
 CREATE INDEX IF NOT EXISTS idx_conditions_activity ON conditions(activity_id);
 CREATE INDEX IF NOT EXISTS idx_weather_location ON weather_log(location, recorded_at);
-CREATE INDEX IF NOT EXISTS idx_todoist_sync_status ON todoist_sync(sync_status);
 CREATE INDEX IF NOT EXISTS idx_activity_log_item ON activity_log(item_type, item_id);

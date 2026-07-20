@@ -10,8 +10,8 @@ Keep it short and actionable. Structure as:
 
 1. **What happened overnight** — triggers fired, dates that moved, items completed
 2. **Today's priorities** — ONLY steps from the "Due Today or Overdue" section.
-   These already exist as Todoist tasks. Never promote future items into this
-   section, even if they seem urgent — an item due next week belongs in This week.
+   Never promote future items into this section, even if they seem urgent — an
+   item due next week belongs in This week.
 3. **This week** — ONLY items from the "This Week" context section (next 7 days).
    One line per item: name and date, nothing more. No methodology, no reminders
    of why it matters — the details live in the task itself. Anything dated beyond
@@ -25,7 +25,7 @@ Skip any section that has no content. Don't pad with filler.
 
 This briefing must stay readable with many domains. Per domain, list at most
 2-3 lines in This week; if there are more, bundle: "Yard: 4 more steps this
-week (see Todoist)." When items share a group_name, mention them as one bundle
+week — ask for the list." When items share a group_name, mention them as one bundle
 ("Tomatoes: transplant due, harvest watch starts Thu") instead of listing each.
 
 ## Say it once

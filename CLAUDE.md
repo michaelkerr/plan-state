@@ -3,7 +3,7 @@
 # Plan-State
 
 ## What this is
-A condition-aware activity orchestrator for personal life domains (lawn care, gardening, hunting, health, home maintenance). It turns LLM-generated domain plans into managed, condition-aware tasks that re-cascade automatically when things slip, complete, or change. Deployed as a capability that registers into a running Hermes Agent instance (branded "Gideon") on a Mac Mini home server. Users interact via Telegram; tasks surface in Todoist. A daily cron pipeline (zero LLM tokens) pulls weather, evaluates triggers, cascades dates, and syncs to Todoist. An LLM morning briefing follows.
+A condition-aware activity orchestrator for personal life domains (lawn care, gardening, hunting, health, home maintenance). It turns LLM-generated domain plans into managed, condition-aware tasks that re-cascade automatically when things slip, complete, or change. Deployed as a capability that registers into a running Hermes Agent instance (branded "Gideon") on a Mac Mini home server. Telegram is the sole task surface: a daily cron pipeline (zero LLM tokens) pulls weather, evaluates triggers, and cascades dates; an LLM morning briefing follows at 6:15, and a deterministic evening nudge at 5 PM lists anything still open (silent on clear days). Completions are conversational -- the user tells Gideon, which calls complete_activity.
 
 ## Build protocol
 - The build plan lives in BUILD_PLAN.md. Read it at the start of every session.
@@ -23,8 +23,7 @@ A condition-aware activity orchestrator for personal life domains (lawn care, ga
 - **Language**: Python 3 (no type hints in existing code)
 - **Database**: SQLite 3, DELETE journal mode (WAL is unreliable over the exFAT/VirtioFS mount), foreign keys enabled
 - **MCP server**: `mcp>=1.0.0` (stdio JSON-RPC)
-- **HTTP clients**: `requests` (weather API, Todoist API)
-- **Todoist**: unified API v1 via `requests`
+- **HTTP clients**: `requests` (weather API)
 - **Weather**: OpenWeatherMap API (current + forecast)
 - **Runtime**: Docker container running Hermes Agent, deployed on Mac Mini
 - **Messaging**: Telegram (via Hermes gateway)
@@ -34,18 +33,20 @@ A condition-aware activity orchestrator for personal life domains (lawn care, ga
 ```
 plan-state/
 ├── register.sh                 # Installs app into running Hermes instance
-├── schema.sql                  # SQLite schema (7 tables)
+├── schema.sql                  # SQLite schema (6 tables)
 ├── init-db.py                  # Database initializer
 ├── mcp-server/
 │   ├── server.py               # MCP server (11 tools) over stdio JSON-RPC
 │   └── requirements.txt        # mcp>=1.0.0
 ├── sync/
-│   ├── daily_sync.py           # 7-step deterministic sync pipeline (~650 lines)
-│   └── requirements.txt        # requests, todoist-api-python
+│   ├── daily_sync.py           # Deterministic sync pipeline (weather, conditions, triggers, cascade, overdue)
+│   ├── evening_nudge.py        # Evening "still open today" reminder (silent when clear)
+│   └── requirements.txt        # requests
 ├── scripts/                    # Cron wrappers (copied to Hermes data dir by register.sh)
 │   ├── daily-sync.py           # Delegates to sync/daily_sync.py
 │   ├── briefing-context.py     # Reads sync output + DB for LLM briefing
-│   └── briefing-context.sh     # Shell wrapper for briefing-context.py
+│   ├── briefing-context.sh     # Shell wrapper for briefing-context.py
+│   └── evening-nudge.py        # Delegates to sync/evening_nudge.py
 ├── skills/                     # Hermes skills (loaded via external_dirs, live immediately)
 │   ├── plansync.md             # MCP tool workflow and trigger format reference
 │   ├── plansync-briefing.md    # Morning briefing generation instructions
@@ -70,24 +71,24 @@ plan-state/
 - Trigger definitions are JSON objects with a `type` field: `calendar`, `condition`, `dependency`, `compound`
 - The cron pipeline for the initial implementation is deterministic (zero LLM tokens). LLM reasoning happens only in Hermes sessions and the morning briefing
 - Step dates cascade automatically from activity trigger dates (prep = trigger - lead_days, follow_up = trigger + lead_days)
-- Activity log captures all state changes with source attribution (`cron`, `hermes`, `todoist_webhook`)
-- Activities carry an optional free-form `group_name` for within-domain bundling (crop, bed, species). Display/organization only -- trigger logic comes from dependency chains, never groups. Todoist task names are prefixed "Group: Task"
+- Activity log captures all state changes with source attribution (`cron`, `hermes`)
+- Activities carry an optional free-form `group_name` for within-domain bundling (crop, bed, species). Display/organization only -- trigger logic comes from dependency chains, never groups
 - A domain = one location/weather context. Activity vs step: needs its own trigger (date, weather, dependency) → activity; fixed-offset chore around a triggered event → step
 - weather_log assumes ONE row per location per day (sustained_days reads the last N rows). Daily high/low are derived from the 3-hourly forecast via derive_daily_range(), not the snapshot. After ad-hoc manual sync runs, delete duplicate same-day rows
 - Every condition or compound activity must include a matching `conditions` array -- the cron evaluates condition triggers from the conditions table, not trigger_def
 
 ## Do not
 - Do not use class components or ORM -- raw SQL via sqlite3, schemas in schema.sql
-- Do not evaluate weather conditions or sync to Todoist during planning conversations -- the cron job handles that
+- Do not evaluate weather conditions during planning conversations -- the cron job handles that
 - Do not delete and recreate activities to modify them -- use update_activity
-- Do not add external service dependencies to the automated cron pipeline without asking the user first -- additional external API calls beyond weather and Todoist need to be evaluated
+- Do not add external service dependencies to the automated cron pipeline without asking the user first -- additional external API calls beyond weather need to be evaluated
 - Do not break the volume-mount contract: the entire repo is mounted at /opt/plansync/; skills are loaded via external_dirs, scripts are copied (Hermes blocks symlinks outside /opt/data/scripts/), MCP server config lives in Gideon's config.yaml
 
 ## Decisions
 - **Hermes Agent, not raw Claude sessions** -- persistent memory, skill system, Telegram integration, cron scheduling all come free
 - **SQLite, not Postgres** -- single-user system on a home server, no need for a database server
-- **Deterministic cron, not LLM-in-the-loop** -- weather eval, trigger logic, date cascading, Todoist sync are all rule-based. Zero tokens, zero latency, zero external dependency beyond APIs
-- **Todoist as task surface** -- user already lives in Todoist; tasks appear there naturally
+- **Deterministic cron, not LLM-in-the-loop** -- weather eval, trigger logic, date cascading are all rule-based. Zero tokens, zero latency, zero external dependency beyond the weather API
+- **Telegram as sole task surface (2026-07-19)** -- Todoist integration removed: ~300 lines + the system's most fragile external dependency (API sunset incident) for a once-daily completion poll. Completions are conversational via complete_activity (immediate, captures notes); the evening nudge replaces due-time reminders
 - **Local LLM for automated tasks** -- zero marginal cost, no external dependency for the morning briefing pipeline. Model is swappable via Hermes config.
 - **Split repos (plan-state + gideon)** -- Hermes infrastructure can be upgraded independently from this capability
 

@@ -8,11 +8,11 @@ Plan-state is a **capability** that registers into a running [Hermes Agent](http
 
 1. **Plan**: Talk to Gideon (Hermes) via Telegram. Describe what you want to manage -- "help me plan my fall garden succession for Zone 7a." The LLM generates a structured domain plan and writes it to the plan store via MCP tools.
 
-2. **Monitor**: Every morning at 6 AM, a deterministic cron job (zero LLM tokens) pulls weather, evaluates trigger conditions against current data, fires triggers when conditions are met, cascades dates through prep/follow-up chains, and syncs everything to Todoist.
+2. **Monitor**: Every morning at 6 AM, a deterministic cron job (zero LLM tokens) pulls weather, evaluates trigger conditions against current data, fires triggers when conditions are met, and cascades dates through prep/follow-up chains.
 
-3. **Brief**: At 6:15 AM, an LLM-backed cron job generates a concise morning briefing from the sync results and delivers it to Telegram.
+3. **Brief**: At 6:15 AM, an LLM-backed cron job generates a concise morning briefing from the sync results and delivers it to Telegram. At 5 PM, a deterministic evening nudge lists anything still open today (silent when nothing is due).
 
-4. **Act**: Tasks appear in Todoist with contextual descriptions and cascaded due dates. Complete them there; completions sync back to the plan store on the next morning run.
+4. **Act**: Work from the briefing. When you finish something, tell Gideon ("done with the fungicide") -- it marks the activity complete and cascades follow-ups immediately.
 
 5. **Adapt**: When something changes, message Gideon. The LLM updates the plan store, and the next cron run re-cascades everything.
 
@@ -20,7 +20,7 @@ Plan-state is a **capability** that registers into a running [Hermes Agent](http
 
 - A running Hermes Agent instance (the sibling `gideon/` repo handles this)
 - Docker
-- API keys: `OPENWEATHERMAP_API_KEY`, `TODOIST_API_KEY` (set in `gideon/.env`)
+- API keys: `OPENWEATHERMAP_API_KEY` (set in `gideon/.env`)
 
 ## Setup
 
@@ -51,10 +51,11 @@ docker exec -it gideon-gateway hermes chat -q 'Use the plansync tools to list do
 
 ## What's built
 
-- **SQLite plan store**: 7-table schema tracking domains, activities, steps, conditions, weather, Todoist sync state, and an activity log
-- **MCP server**: 10 tools for reading and writing plan state (create/update/complete/defer activities, record observations, query upcoming items and weather)
-- **Daily sync pipeline**: 7-step deterministic script -- weather pull, condition evaluation, trigger evaluation, date re-estimation, overdue check, Todoist sync, summary output
+- **SQLite plan store**: 6-table schema tracking domains, activities, steps, conditions, weather, and an activity log
+- **MCP server**: 12 tools for reading and writing plan state (load/amend domains, create/update/complete/defer activities, record observations, query upcoming items and weather)
+- **Daily sync pipeline**: deterministic script -- weather pull, condition evaluation, trigger evaluation, date re-estimation, overdue check, summary output
 - **Morning briefing**: LLM-generated daily briefing from sync output
+- **Evening nudge**: deterministic reminder of anything still open today; silent on clear days
 - **Registration script**: One-command install into a running Hermes instance
 
 See [BUILD_PLAN.md](BUILD_PLAN.md) for current status and next steps.
@@ -63,11 +64,11 @@ See [BUILD_PLAN.md](BUILD_PLAN.md) for current status and next steps.
 
 **Why Hermes Agent, not raw Claude sessions?** Persistent cross-session memory, a skill system, Telegram integration, and cron scheduling come built-in. No custom infrastructure to maintain.
 
-**Why a deterministic cron pipeline?** Weather evaluation, trigger logic, date cascading, and Todoist sync are all rule-based. Running them without LLM involvement means zero token cost, zero latency, and zero external dependency beyond the weather and Todoist APIs. The LLM is reserved for where it adds value: planning conversations and contextual briefings. The local model is swappable via Hermes config -- the system is model-agnostic.
+**Why a deterministic cron pipeline?** Weather evaluation, trigger logic, and date cascading are all rule-based. Running them without LLM involvement means zero token cost, zero latency, and zero external dependency beyond the weather API. The LLM is reserved for where it adds value: planning conversations and contextual briefings. The local model is swappable via Hermes config -- the system is model-agnostic.
 
-**Why Todoist?** The user already lives in Todoist. Tasks appear there naturally alongside everything else, with cascaded due dates and contextual descriptions. No new app to check.
+**Why Telegram as the only task surface?** Todoist integration was removed in 2026-07: it was ~300 lines of sync code plus the system's most fragile external dependency (its API sunset broke the pipeline once), and daily polling meant checkbox completions were only detected next-day anyway. Conversational completion is immediate, cascades follow-ups on the spot, and can capture field notes a checkbox never could.
 
-**Why SQLite?** Single-user system on a home server. No need for a database server process. WAL mode handles concurrent reads from MCP server and cron job.
+**Why SQLite?** Single-user system on a home server. No need for a database server process.
 
 **Why split repos?** Hermes infrastructure (`gideon/`) can be upgraded, reconfigured, or redeployed independently from this capability. Plan-state registers itself and doesn't care how Hermes is hosted.
 
@@ -82,15 +83,16 @@ Hermes Agent (Docker) ──── MCP ────► plan-state MCP server ─
     │ cron 6:00 AM                                                 │
     ▼                                                              │
 daily_sync.py ─── Weather API ──► condition eval ──► trigger ──► cascade
-    │                                                              │
-    │                                                              ▼
-    └──────────────────────────────────────────────────────► Todoist API
     │
     │ cron 6:15 AM
     ▼
 briefing-context.py ──► LLM ──► Telegram briefing
+    │
+    │ cron 5:00 PM
+    ▼
+evening_nudge.py ──► "still open today" ──► Telegram (silent if clear)
 ```
 
 ## Future direction
 
-The PRD (`docs/prd.md`) describes a v2 architecture based on Holland's *Signals and Boundaries*: federated autonomous agents interacting through tagged signals across semi-permeable boundaries. The current v1 is a stepping stone -- validating the core product insight (LLM-contextual proactive notifications for condition-dependent activities) before building the full signal infrastructure.
+v1 is the target architecture. A more elaborate v2 design (federated signal/boundary agents) is archived at `docs/archive/v2-signals-boundaries-prd.md` -- revisit only if a full season of operation surfaces a concrete limitation of the current model.

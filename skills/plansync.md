@@ -2,7 +2,9 @@
 
 You have access to the plan-sync MCP tools for managing domain plans.
 These tools read/write a SQLite database that tracks activities,
-conditions, prep steps, and Todoist sync state.
+conditions, and prep steps. Telegram chat is the sole task surface:
+the morning briefing and evening nudge report what is due, and the
+user reports completions conversationally.
 
 ## Available Tools (via plansync MCP server)
 
@@ -69,9 +71,11 @@ Combine calendar and condition triggers.
 
 ## Important
 
-- The cron sync job handles condition evaluation and Todoist sync.
-  Do NOT try to evaluate weather conditions or sync to Todoist
-  during a planning conversation.
+- The cron sync job handles condition evaluation. Do NOT try to
+  evaluate weather conditions during a planning conversation.
+- When the user says they finished something ("done with the
+  fungicide"), find the matching activity or step and call
+  complete_activity -- this is the ONLY completion path.
 - Dates cascade automatically when you defer or update trigger_dates.
 - If the user asks "what's coming up," call get_upcoming() rather
   than trying to reconstruct the schedule from memory.

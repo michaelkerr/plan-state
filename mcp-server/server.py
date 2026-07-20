@@ -66,14 +66,6 @@ def cascade_step_dates(conn, activity_id, trigger_date_str):
             old_due = s["due_date"]
             conn.execute("UPDATE steps SET due_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (new_due, s["id"]))
             log_change(conn, "step", s["id"], "date_cascade", {"due_date": old_due}, {"due_date": new_due})
-            conn.execute(
-                """INSERT OR REPLACE INTO todoist_sync (plan_item_id, plan_item_type, todoist_task_id, todoist_project, last_synced, sync_status)
-                   VALUES (?, 'step',
-                     COALESCE((SELECT todoist_task_id FROM todoist_sync WHERE plan_item_id=? AND plan_item_type='step'), NULL),
-                     COALESCE((SELECT todoist_project FROM todoist_sync WHERE plan_item_id=? AND plan_item_type='step'), NULL),
-                     NULL, 'pending_update')""",
-                (s["id"], s["id"], s["id"]),
-            )
 
 
 def compute_trigger_date(trigger_def):
@@ -768,15 +760,6 @@ def _complete_activity(conn, args) -> list[types.TextContent]:
             cascade_step_dates(conn, dep["id"], new_trigger)
             log_change(conn, "activity", dep["id"], "trigger_fire", {"status": "watching"}, {"status": "preparing", "trigger_date": new_trigger})
             activated.append({"id": dep["id"], "name": dep["name"], "trigger_date": new_trigger})
-
-    conn.execute(
-        """INSERT OR REPLACE INTO todoist_sync (plan_item_id, plan_item_type, todoist_task_id, todoist_project, last_synced, sync_status)
-           VALUES (?, 'activity',
-             COALESCE((SELECT todoist_task_id FROM todoist_sync WHERE plan_item_id=? AND plan_item_type='activity'), NULL),
-             COALESCE((SELECT todoist_project FROM todoist_sync WHERE plan_item_id=? AND plan_item_type='activity'), NULL),
-             NULL, 'pending_close')""",
-        (aid, aid, aid),
-    )
 
     conn.commit()
     return ok({

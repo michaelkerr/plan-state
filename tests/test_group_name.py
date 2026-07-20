@@ -189,9 +189,3 @@ class TestBriefingContext:
         assert result.returncode == 0, result.stderr
         assert '"group_name": "Tomatoes"' in result.stdout
 
-
-class TestTodoistNaming:
-    def test_task_content_prefixes_group(self):
-        import daily_sync
-        assert daily_sync.task_content("Tomatoes", "Transplant Tomatoes") == "Tomatoes: Transplant Tomatoes"
-        assert daily_sync.task_content(None, "Plant Garlic") == "Plant Garlic"
