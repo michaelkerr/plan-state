@@ -35,6 +35,8 @@ plan-state/
 ├── register.sh                 # Installs app into running Hermes instance
 ├── schema.sql                  # SQLite schema (6 tables)
 ├── init-db.py                  # Database initializer
+├── plansync/
+│   └── engine.py               # Shared engine: get_db, log_change, cascade, trigger/step date math
 ├── mcp-server/
 │   ├── server.py               # MCP server (11 tools) over stdio JSON-RPC
 │   └── requirements.txt        # mcp>=1.0.0
@@ -76,6 +78,8 @@ plan-state/
 - A domain = one location/weather context. Activity vs step: needs its own trigger (date, weather, dependency) → activity; fixed-offset chore around a triggered event → step
 - weather_log assumes ONE row per location per day (sustained_days reads the last N rows). Daily high/low are derived from the 3-hourly forecast via derive_daily_range(), not the snapshot. After ad-hoc manual sync runs, delete duplicate same-day rows
 - Every condition or compound activity must include a matching `conditions` array -- the cron evaluates condition triggers from the conditions table, not trigger_def
+- Shared logic lives in `plansync/engine.py` (get_db, log_change, cascade_step_dates, compute_trigger_date, step_due_date, row_to_dict); server.py, daily_sync.py, and evening_nudge.py import it and must not define local copies (enforced by tests/test_engine_extraction.py). DB path and client identity resolve from env (`PLANSYNC_DB`, `PLANSYNC_CLIENT`) at call time
+- activity_log source attribution: `cron` (sync pipeline, passed explicitly), `hermes`/`claude` (via PLANSYNC_CLIENT env on the MCP server), `human` (reserved)
 
 ## Do not
 - Do not use class components or ORM -- raw SQL via sqlite3, schemas in schema.sql

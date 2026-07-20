@@ -213,12 +213,13 @@ Built 2026-07-20. Plan correction: the original note claimed the schema CHECK ch
 
 
 ### Step 28: Extract shared engine module
-Status: not started
+Status: complete
 What it does: Cascade logic (cascade_step_dates / _cascade_steps) and trigger-date computation (compute_trigger_date) are duplicated between server.py and daily_sync.py -- same algorithm, two files, inevitable drift. Extract into a shared plansync/engine.py module imported by both. Includes: cascade_step_dates, compute_trigger_date, log_change, get_db, and row_to_dict. Both server.py and daily_sync.py import from the shared module instead of maintaining their own copies.
 What good looks like: Zero duplicated domain logic between server.py and daily_sync.py. A change to cascade behavior is made once, tested once, and both code paths use it. The shared module is importable from tests without starting the MCP server.
 Test: Existing regression suites pass with imports redirected. Add a test that verifies server.py and daily_sync.py contain no local definitions of the extracted functions.
 Builds on: Steps 2, 3
 Notes: Do before Step 22 so conditions-derivation logic lands in the shared module from the start, not as a later refactor. The volume mount means the shared module is live-editable like everything else.
+Built and approved 2026-07-20. Beyond spec: (1) engine.db_path() resolves PLANSYNC_DB at call time, not import time -- test fixtures no longer monkeypatch module DB_PATH attrs; (2) new engine.step_due_date() -- the prep/follow-up date formula existed in FOUR places (both cascade copies plus inline copies in _insert_activity and _create_activity step creation), all now call the one helper; (3) evening_nudge.py's third copy of get_db removed too. daily_sync call sites pass source="cron" explicitly; _cascade_steps is a two-line delegate feeding the summary via the engine's on_change callback. Verified live in-container: imports clean, manual sync run end-to-end through the shared engine (weather upsert held one row, overdue report intact). Regression tests in tests/test_engine_extraction.py (12 tests: no-local-definitions checks for all three consumers, engine importable without mcp, cascade/compute/env behavior).
 
 
 ### Step 22: Conditions derivation + tool consolidation

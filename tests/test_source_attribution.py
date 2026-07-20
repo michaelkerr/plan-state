@@ -51,7 +51,6 @@ def db(db_path):
 def patch_db_path(db_path, monkeypatch):
     monkeypatch.setenv("PLANSYNC_DB", db_path)
     import server
-    monkeypatch.setattr(server, "DB_PATH", db_path)
 
 
 def call_load_domain():
@@ -116,6 +115,15 @@ class TestSourceAttribution:
         monkeypatch.setenv("PLANSYNC_CLIENT", "claude")  # must not affect the cron path
         import daily_sync
         db.execute("INSERT INTO domains (id, name, location) VALUES ('d1','D','X')")
-        daily_sync.log_change(db, "domain", "d1", "created", None, {"name": "D"})
+        db.execute(
+            "INSERT INTO activities (id,domain_id,name,trigger_type,trigger_def,trigger_date,status) "
+            "VALUES ('a1','d1','Act','calendar','{\"type\": \"calendar\", \"date\": \"2026-01-01\"}','2026-01-01','watching')"
+        )
+        db.execute(
+            "INSERT INTO steps (id,activity_id,name,step_type,lead_days,status) VALUES ('s1','a1','After','follow_up',2,'pending')"
+        )
         db.commit()
+        daily_sync.evaluate_triggers(db, daily_sync.SyncSummary())
+        db.commit()
+        assert len(log_sources(db)) > 0
         assert log_sources(db) == {"cron"}

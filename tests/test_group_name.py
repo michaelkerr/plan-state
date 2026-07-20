@@ -72,7 +72,6 @@ def db(db_path):
 def patch_db_path(db_path, monkeypatch):
     monkeypatch.setenv("PLANSYNC_DB", db_path)
     import server
-    monkeypatch.setattr(server, "DB_PATH", db_path)
 
 
 def call_tool(fn_name, args):

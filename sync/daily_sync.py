@@ -6,7 +6,6 @@ date cascade, overdue check, summary output. Zero LLM tokens.
 
 import json
 import os
-import sqlite3
 import sys
 from datetime import date, datetime, timedelta, timezone
 
@@ -15,7 +14,9 @@ try:
 except ImportError:  # absent in test/tooling environments; required in the container
     requests = None
 
-DB_PATH = os.environ.get("PLANSYNC_DB", "/opt/plansync/plansync.db")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from plansync import engine  # noqa: E402
+
 OWM_KEY = os.environ.get("OPENWEATHERMAP_API_KEY", "")
 OUTPUT_DIR = os.environ.get("PLANSYNC_OUTPUT_DIR", "/opt/plansync/sync-output")
 
@@ -67,22 +68,6 @@ class SyncSummary:
                 lines.append(f"  - {str(e).splitlines()[0]}")
         lines.append("---")
         return "\n".join(lines)
-
-
-def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    # No WAL here: unsupported on the exFAT/VirtioFS mount (see init-db.py)
-    conn.execute("PRAGMA busy_timeout=5000")
-    conn.execute("PRAGMA foreign_keys=ON")
-    return conn
-
-
-def log_change(conn, item_type, item_id, action, old_value, new_value):
-    conn.execute(
-        "INSERT INTO activity_log (item_type, item_id, action, old_value, new_value, source) VALUES (?,?,?,?,?,?)",
-        (item_type, item_id, action, json.dumps(old_value), json.dumps(new_value), "cron"),
-    )
 
 
 # ── Step 1: Weather Pull ────────────────────────────────────
@@ -302,8 +287,8 @@ def evaluate_triggers(conn, summary):
                 "UPDATE activities SET status=?, trigger_fired=?, trigger_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
                 (new_status, NOW.isoformat(), trigger_date, act["id"]),
             )
-            log_change(conn, "activity", act["id"], "trigger_fire",
-                        {"status": "watching"}, {"status": new_status, "reason": reason})
+            engine.log_change(conn, "activity", act["id"], "trigger_fire",
+                        {"status": "watching"}, {"status": new_status, "reason": reason}, source="cron")
 
             if trigger_date:
                 _cascade_steps(conn, act["id"], trigger_date, summary)
@@ -368,21 +353,11 @@ def _check_trigger(conn, act, tdef):
 
 
 def _cascade_steps(conn, activity_id, trigger_date_str, summary):
-    trigger_dt = date.fromisoformat(trigger_date_str)
-    steps = conn.execute(
-        "SELECT * FROM steps WHERE activity_id=? AND status NOT IN ('completed','skipped')",
-        (activity_id,),
-    ).fetchall()
-    for s in steps:
-        if s["step_type"] == "prep":
-            new_due = (trigger_dt - timedelta(days=s["lead_days"])).isoformat()
-        else:
-            new_due = (trigger_dt + timedelta(days=s["lead_days"])).isoformat()
-        old_due = s["due_date"]
-        if new_due != old_due:
-            conn.execute("UPDATE steps SET due_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (new_due, s["id"]))
-            log_change(conn, "step", s["id"], "date_cascade", {"due_date": old_due}, {"due_date": new_due})
-            summary.dates_cascaded.append({"name": s["name"], "old_date": old_due, "new_date": new_due})
+    engine.cascade_step_dates(
+        conn, activity_id, trigger_date_str, source="cron",
+        on_change=lambda s, old_due, new_due: summary.dates_cascaded.append(
+            {"name": s["name"], "old_date": old_due, "new_date": new_due}),
+    )
 
 
 # ── Step 4: Date Re-cascade ─────────────────────────────────
@@ -402,8 +377,8 @@ def reestimate_dates(conn, summary):
         if estimated and estimated != act["trigger_date"]:
             old_date = act["trigger_date"]
             conn.execute("UPDATE activities SET trigger_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (estimated, act["id"]))
-            log_change(conn, "activity", act["id"], "date_cascade",
-                        {"trigger_date": old_date}, {"trigger_date": estimated})
+            engine.log_change(conn, "activity", act["id"], "date_cascade",
+                        {"trigger_date": old_date}, {"trigger_date": estimated}, source="cron")
             _cascade_steps(conn, act["id"], estimated, summary)
 
 
@@ -498,12 +473,12 @@ def save_output(summary):
 # ── Main ─────────────────────────────────────────────────────
 
 def main():
-    if not os.path.exists(DB_PATH):
-        print(f"Database not found at {DB_PATH}", file=sys.stderr)
+    if not os.path.exists(engine.db_path()):
+        print(f"Database not found at {engine.db_path()}", file=sys.stderr)
         sys.exit(1)
 
     summary = SyncSummary()
-    conn = get_db()
+    conn = engine.get_db()
 
     try:
         pull_weather(conn, summary)

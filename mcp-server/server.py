@@ -5,6 +5,7 @@ import asyncio
 import json
 import os
 import sqlite3
+import sys
 import uuid
 from datetime import date, datetime, timedelta
 
@@ -12,79 +13,21 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 import mcp.types as types
 
-DB_PATH = os.environ.get("PLANSYNC_DB", "/opt/plansync/plansync.db")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from plansync.engine import (  # noqa: E402
+    cascade_step_dates,
+    compute_trigger_date,
+    get_db,
+    log_change,
+    row_to_dict,
+    step_due_date,
+)
 
 server = Server("plansync")
 
 
-def get_db() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    # No WAL here: unsupported on the exFAT/VirtioFS mount (see init-db.py)
-    conn.execute("PRAGMA busy_timeout=5000")
-    conn.execute("PRAGMA foreign_keys=ON")
-    return conn
-
-
 def new_id() -> str:
     return uuid.uuid4().hex[:12]
-
-
-def row_to_dict(row: sqlite3.Row) -> dict:
-    d = dict(row)
-    for k, v in d.items():
-        if k.endswith("_json") or k in ("trigger_def", "recurrence", "condition", "definition", "forecast_json", "old_value", "new_value"):
-            if isinstance(v, str):
-                try:
-                    d[k] = json.loads(v)
-                except (json.JSONDecodeError, TypeError):
-                    pass
-    return d
-
-
-def log_change(conn, item_type, item_id, action, old_value, new_value, source=None):
-    if source is None:
-        source = os.environ.get("PLANSYNC_CLIENT", "hermes")
-    conn.execute(
-        "INSERT INTO activity_log (item_type, item_id, action, old_value, new_value, source) VALUES (?,?,?,?,?,?)",
-        (item_type, item_id, action, json.dumps(old_value), json.dumps(new_value), source),
-    )
-
-
-def cascade_step_dates(conn, activity_id, trigger_date_str):
-    if not trigger_date_str:
-        return
-    trigger_dt = date.fromisoformat(trigger_date_str)
-    steps = conn.execute(
-        "SELECT id, step_type, lead_days, due_date FROM steps WHERE activity_id=? AND status NOT IN ('completed','skipped')",
-        (activity_id,),
-    ).fetchall()
-    for s in steps:
-        if s["step_type"] == "prep":
-            new_due = (trigger_dt - timedelta(days=s["lead_days"])).isoformat()
-        else:
-            new_due = (trigger_dt + timedelta(days=s["lead_days"])).isoformat()
-        if new_due != s["due_date"]:
-            old_due = s["due_date"]
-            conn.execute("UPDATE steps SET due_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (new_due, s["id"]))
-            log_change(conn, "step", s["id"], "date_cascade", {"due_date": old_due}, {"due_date": new_due})
-
-
-def compute_trigger_date(trigger_def):
-    if not trigger_def:
-        return None
-    if isinstance(trigger_def, str):
-        trigger_def = json.loads(trigger_def)
-    t = trigger_def.get("type")
-    if t == "calendar":
-        return trigger_def.get("date")
-    if t == "compound":
-        for sub in trigger_def.get("conditions", []):
-            if sub.get("type") == "calendar":
-                d = sub.get("date") or sub.get("after")
-                if d:
-                    return d
-    return None
 
 
 def ok(data) -> list[types.TextContent]:
@@ -436,13 +379,7 @@ def _insert_activity(conn, domain_id, aid, act_def, name_to_id, default_sort):
     created_steps = []
     for j, step_def in enumerate(act_def.get("steps", [])):
         sid = new_id()
-        due = None
-        if trigger_date:
-            td = date.fromisoformat(trigger_date)
-            if step_def["step_type"] == "prep":
-                due = (td - timedelta(days=step_def["lead_days"])).isoformat()
-            else:
-                due = (td + timedelta(days=step_def["lead_days"])).isoformat()
+        due = step_due_date(trigger_date, step_def["step_type"], step_def["lead_days"])
         conn.execute(
             """INSERT INTO steps (id, activity_id, name, description, step_type, lead_days, due_date, condition, sort_order)
                VALUES (?,?,?,?,?,?,?,?,?)""",
@@ -633,13 +570,7 @@ def _create_activity(conn, args) -> list[types.TextContent]:
     created_steps = []
     for i, step in enumerate(args.get("steps", [])):
         sid = new_id()
-        due = None
-        if trigger_date:
-            td = date.fromisoformat(trigger_date)
-            if step["step_type"] == "prep":
-                due = (td - timedelta(days=step["lead_days"])).isoformat()
-            else:
-                due = (td + timedelta(days=step["lead_days"])).isoformat()
+        due = step_due_date(trigger_date, step["step_type"], step["lead_days"])
         conn.execute(
             """INSERT INTO steps (id, activity_id, name, description, step_type, lead_days, due_date, condition, sort_order)
                VALUES (?,?,?,?,?,?,?,?,?)""",

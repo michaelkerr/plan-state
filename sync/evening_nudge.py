@@ -7,21 +7,13 @@ mention. Prints NOTHING when nothing is open -- no output, no Telegram message.
 """
 
 import os
-import sqlite3
 import sys
 from datetime import date
 
-DB_PATH = os.environ.get("PLANSYNC_DB", "/opt/plansync/plansync.db")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from plansync import engine  # noqa: E402
+
 MAX_LINES = 10
-
-
-def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    # No WAL here: unsupported on the exFAT/VirtioFS mount (see init-db.py)
-    conn.execute("PRAGMA busy_timeout=5000")
-    conn.execute("PRAGMA foreign_keys=ON")
-    return conn
 
 
 def _label(domain, group, name):
@@ -78,10 +70,10 @@ def build_nudge(conn, today):
 
 
 def main():
-    if not os.path.exists(DB_PATH):
-        print(f"Database not found at {DB_PATH}", file=sys.stderr)
+    if not os.path.exists(engine.db_path()):
+        print(f"Database not found at {engine.db_path()}", file=sys.stderr)
         sys.exit(1)
-    conn = get_db()
+    conn = engine.get_db()
     try:
         msg = build_nudge(conn, date.today().isoformat())
     finally:
