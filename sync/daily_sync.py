@@ -158,9 +158,9 @@ def upsert_weather_row(conn, loc, temp_high, temp_low, conditions, precipitation
         )
     else:
         conn.execute(
-            """INSERT INTO weather_log (location, temp_high, temp_low, soil_temp, conditions, precipitation, forecast_json)
-               VALUES (?,?,?,?,?,?,?)""",
-            (loc, temp_high, temp_low, None, conditions, precipitation, forecast_json),
+            """INSERT INTO weather_log (location, temp_high, temp_low, conditions, precipitation, forecast_json)
+               VALUES (?,?,?,?,?,?)""",
+            (loc, temp_high, temp_low, conditions, precipitation, forecast_json),
         )
 
 
@@ -199,13 +199,12 @@ def evaluate_conditions(conn, summary):
 
 
 def _eval_temperature(conn, location, cdef):
-    metric = cdef.get("metric", "soil_temp")
+    metric = cdef.get("metric", "daily_high")
     op = cdef.get("operator", ">=")
     threshold = cdef.get("value", 0)
     sustained = cdef.get("sustained_days", 1)
 
     col_map = {
-        "soil_temp": "soil_temp",
         "daily_high": "temp_high",
         "daily_low": "temp_low",
         "temp_high": "temp_high",
@@ -453,7 +452,8 @@ def check_overdue(conn, summary):
     overdue = conn.execute(
         """SELECT s.*, a.name as activity_name FROM steps s
            JOIN activities a ON s.activity_id = a.id
-           WHERE s.status IN ('pending','due') AND s.due_date < ? AND s.due_date IS NOT NULL""",
+           WHERE s.status IN ('pending','due') AND s.due_date < ? AND s.due_date IS NOT NULL
+             AND a.status IN ('watching','preparing','active')""",
         (TODAY.isoformat(),),
     ).fetchall()
 

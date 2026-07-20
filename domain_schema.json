@@ -46,7 +46,6 @@
           "enum": ["calendar", "condition", "dependency", "compound"]
         },
         "trigger_def": { "$ref": "#/$defs/trigger_def" },
-        "recurrence": { "$ref": "#/$defs/recurrence" },
         "sort_order": {
           "type": "integer",
           "default": 0,
@@ -119,7 +118,7 @@
       "properties": {
         "metric": {
           "type": "string",
-          "enum": ["daily_high", "daily_low", "temp_high", "temp_low", "soil_temp"],
+          "enum": ["daily_high", "daily_low", "temp_high", "temp_low"],
           "description": "Weather metric to evaluate"
         },
         "operator": {
@@ -158,38 +157,6 @@
           "type": "integer",
           "minimum": 0,
           "description": "Days before (prep) or after (follow_up) the trigger date"
-        },
-        "condition": {
-          "type": "object",
-          "description": "Optional conditional activation logic for this step"
-        }
-      },
-      "additionalProperties": false
-    },
-    "recurrence": {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "enum": ["annual", "monthly", "weekly", "custom"],
-          "description": "Recurrence pattern"
-        },
-        "interval": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "Repeat every N units"
-        },
-        "month": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 12,
-          "description": "Month for annual recurrence"
-        },
-        "day": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 31,
-          "description": "Day of month"
         }
       },
       "additionalProperties": false

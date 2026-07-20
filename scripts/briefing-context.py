@@ -40,6 +40,7 @@ steps = query_db(
        WHERE s.status IN ('pending','due')
          AND s.due_date <= ?
          AND s.due_date IS NOT NULL
+         AND a.status IN ('watching','preparing','active')
        ORDER BY s.due_date""",
     (TODAY,),
 )
@@ -72,9 +73,22 @@ steps = query_db(
 )
 print(json.dumps(steps, indent=2, default=str))
 
+print("\n=== Recent Observations (last 7 days) ===")
+observations = query_db(
+    """SELECT l.timestamp,
+              json_extract(l.new_value, '$.text') as observation,
+              d.name as domain
+       FROM activity_log l
+       LEFT JOIN domains d ON d.id = json_extract(l.new_value, '$.domain_id')
+       WHERE l.action = 'observation'
+         AND l.timestamp >= datetime('now', '-7 days')
+       ORDER BY l.timestamp DESC""",
+)
+print(json.dumps(observations, indent=2, default=str))
+
 print("\n=== Latest Weather ===")
 weather = query_db(
-    """SELECT location, temp_high, temp_low, soil_temp, conditions,
+    """SELECT location, temp_high, temp_low, conditions,
               precipitation, recorded_at
        FROM weather_log
        WHERE recorded_at >= date('now', '-1 day')

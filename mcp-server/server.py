@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from plansync.engine import (  # noqa: E402
     cascade_step_dates,
     compute_trigger_date,
+    defer_trigger_def,
     derive_conditions,
     get_db,
     log_change,
@@ -62,11 +63,10 @@ async def list_tools() -> list[types.Tool]:
                     "name": {"type": "string"},
                     "description": {"type": "string"},
                     "group_name": {"type": "string", "description": "Optional bundle label within the domain (crop, bed, species). Display only."},
-                    "status": {"type": "string", "enum": ["watching", "preparing", "active", "completed", "skipped", "deferred"]},
+                    "status": {"type": "string", "enum": ["watching", "preparing", "active", "completed", "skipped"]},
                     "trigger_type": {"type": "string"},
                     "trigger_def": {"type": "object"},
                     "trigger_date": {"type": "string", "format": "date"},
-                    "recurrence": {"type": "object"},
                 },
                 "required": ["activity_id"],
             },
@@ -85,7 +85,7 @@ async def list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="defer_activity",
-            description="Defer an activity to a new date. Re-cascades all step dates.",
+            description="Defer an activity to a new date: moves the trigger (date or earliest-date gate), returns it to 'watching' so the cron re-fires on the new date, and re-cascades all step dates. Always include a reason.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -93,7 +93,7 @@ async def list_tools() -> list[types.Tool]:
                     "new_date": {"type": "string", "format": "date"},
                     "reason": {"type": "string"},
                 },
-                "required": ["activity_id"],
+                "required": ["activity_id", "new_date"],
             },
         ),
         types.Tool(
@@ -296,12 +296,11 @@ def _insert_activity(conn, domain_id, aid, act_def, name_to_id, default_sort):
     trigger_date = compute_trigger_date(trigger_def)
 
     conn.execute(
-        """INSERT INTO activities (id, domain_id, name, description, group_name, trigger_type, trigger_def, trigger_date, recurrence, sort_order)
-           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        """INSERT INTO activities (id, domain_id, name, description, group_name, trigger_type, trigger_def, trigger_date, sort_order)
+           VALUES (?,?,?,?,?,?,?,?,?)""",
         (
             aid, domain_id, act_def["name"], act_def.get("description"), act_def.get("group_name"),
             act_def["trigger_type"], trigger_def_str, trigger_date,
-            json.dumps(act_def["recurrence"]) if act_def.get("recurrence") else None,
             act_def.get("sort_order", default_sort),
         ),
     )
@@ -312,13 +311,11 @@ def _insert_activity(conn, domain_id, aid, act_def, name_to_id, default_sort):
         sid = new_id()
         due = step_due_date(trigger_date, step_def["step_type"], step_def["lead_days"])
         conn.execute(
-            """INSERT INTO steps (id, activity_id, name, description, step_type, lead_days, due_date, condition, sort_order)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
+            """INSERT INTO steps (id, activity_id, name, description, step_type, lead_days, due_date, sort_order)
+               VALUES (?,?,?,?,?,?,?,?)""",
             (
                 sid, aid, step_def["name"], step_def.get("description"),
-                step_def["step_type"], step_def["lead_days"], due,
-                json.dumps(step_def["condition"]) if step_def.get("condition") else None,
-                j,
+                step_def["step_type"], step_def["lead_days"], due, j,
             ),
         )
         created_steps.append({"id": sid, "name": step_def["name"], "due_date": due})
@@ -414,6 +411,11 @@ def _validate_activities(activities, errors, existing_names=frozenset()):
                 "path": f"{prefix}.conditions",
                 "error": "Explicit conditions arrays are no longer accepted; conditions rows are derived automatically from condition-type leaves in trigger_def. Remove this field.",
             })
+        if "recurrence" in act:
+            errors.append({
+                "path": f"{prefix}.recurrence",
+                "error": "recurrence is not supported (it was never evaluated). Annual plans are re-authored each season via a planning conversation. Remove this field.",
+            })
         if "name" not in act:
             errors.append({"path": f"{prefix}.name", "error": "Required field missing"})
         elif act["name"] in batch_names or act["name"] in existing_names:
@@ -428,6 +430,11 @@ def _validate_activities(activities, errors, existing_names=frozenset()):
             errors.append({"path": f"{prefix}.trigger_def", "error": "Required field missing"})
         for j, step in enumerate(act.get("steps", [])):
             sp = f"{prefix}.steps[{j}]"
+            if "condition" in step:
+                errors.append({
+                    "path": f"{sp}.condition",
+                    "error": "Step conditions are not supported (they were never evaluated). If this step needs its own trigger, make it an activity. Remove this field.",
+                })
             if "name" not in step:
                 errors.append({"path": f"{sp}.name", "error": "Required field missing"})
             if "step_type" not in step:
@@ -444,8 +451,33 @@ def _validate_activities(activities, errors, existing_names=frozenset()):
         if isinstance(act, dict):
             tdef = act.get("trigger_def", {})
             _validate_dependency_refs(tdef, ref_names, f"activities[{i}].trigger_def", errors)
+            _validate_condition_metrics(tdef, f"activities[{i}].trigger_def", errors)
 
     return errors
+
+
+VALID_METRICS = {"daily_high", "daily_low", "temp_high", "temp_low"}
+
+
+def _validate_condition_metrics(tdef, path, errors):
+    if not isinstance(tdef, dict):
+        return
+    if tdef.get("type") == "condition":
+        for j, clause in enumerate(tdef.get("all", [])):
+            metric = clause.get("metric") if isinstance(clause, dict) else None
+            if metric == "soil_temp":
+                errors.append({
+                    "path": f"{path}.all[{j}].metric",
+                    "error": "soil_temp is not available (no data source supplies it) -- use daily_high as a proxy",
+                })
+            elif metric not in VALID_METRICS:
+                errors.append({
+                    "path": f"{path}.all[{j}].metric",
+                    "error": f"Unknown metric '{metric}'. Valid metrics: daily_high, daily_low, temp_high, temp_low",
+                })
+    if tdef.get("type") == "compound":
+        for j, sub in enumerate(tdef.get("conditions", [])):
+            _validate_condition_metrics(sub, f"{path}.conditions[{j}]", errors)
 
 
 def _validate_dependency_refs(tdef, activity_names, path, errors):
@@ -486,12 +518,12 @@ def _update_activity(conn, args) -> list[types.TextContent]:
         return ok({"error": f"Activity {aid} not found"})
     current = row_to_dict(current)
 
-    updatable = ["name", "description", "group_name", "status", "trigger_type", "trigger_def", "trigger_date", "recurrence"]
+    updatable = ["name", "description", "group_name", "status", "trigger_type", "trigger_def", "trigger_date"]
     sets, vals, changes = [], [], {}
     for field in updatable:
         if field in args and args[field] is not None:
             val = args[field]
-            if field in ("trigger_def", "recurrence") and isinstance(val, dict):
+            if field == "trigger_def" and isinstance(val, dict):
                 val = json.dumps(val)
             sets.append(f"{field}=?")
             vals.append(val)
@@ -598,23 +630,26 @@ def _defer_activity(conn, args) -> list[types.TextContent]:
 
     new_date = args.get("new_date")
     reason = args.get("reason", "")
+    if not new_date:
+        return ok({"error": "new_date is required: deferral moves the trigger date (there is no 'deferred' status)"})
 
-    updates = ["status='deferred'", "updated_at=CURRENT_TIMESTAMP"]
-    vals = []
-    if new_date:
-        updates.append("trigger_date=?")
-        vals.append(new_date)
-    vals.append(aid)
-
-    conn.execute(f"UPDATE activities SET {', '.join(updates)} WHERE id=?", vals)
+    # Deferral is a date move, not a status: the activity returns to 'watching'
+    # so the cron re-fires it on the new date (evaluate_triggers only scans
+    # 'watching'; a fired activity being deferred needs its trigger_fired reset).
+    # trigger_def must move too -- _check_trigger fires from it, not trigger_date.
+    old_tdef = row_to_dict(current)["trigger_def"]
+    new_tdef = defer_trigger_def(old_tdef, new_date)
+    conn.execute(
+        "UPDATE activities SET status='watching', trigger_fired=NULL, trigger_date=?, trigger_def=?, trigger_type=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        (new_date, json.dumps(new_tdef), new_tdef["type"], aid),
+    )
     log_change(
-        conn, "activity", aid, "status_change",
-        {"status": current["status"], "trigger_date": current["trigger_date"]},
-        {"status": "deferred", "trigger_date": new_date, "reason": reason},
+        conn, "activity", aid, "manual_update",
+        {"status": current["status"], "trigger_date": current["trigger_date"], "trigger_def": old_tdef},
+        {"status": "watching", "trigger_date": new_date, "trigger_def": new_tdef, "reason": reason},
     )
 
-    if new_date:
-        cascade_step_dates(conn, aid, new_date)
+    cascade_step_dates(conn, aid, new_date)
 
     conn.commit()
 
@@ -693,7 +728,7 @@ def _get_weather_current(conn, location) -> list[types.TextContent]:
         return ok({"location": location, "error": "No weather data recorded for this location"})
 
     history = conn.execute(
-        "SELECT recorded_at, temp_high, temp_low, soil_temp, conditions, precipitation FROM weather_log WHERE location=? ORDER BY recorded_at DESC LIMIT 7",
+        "SELECT recorded_at, temp_high, temp_low, conditions, precipitation FROM weather_log WHERE location=? ORDER BY recorded_at DESC LIMIT 7",
         (location,),
     ).fetchall()
 

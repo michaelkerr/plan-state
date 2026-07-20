@@ -131,7 +131,7 @@ If the tool returns validation errors, fix them and retry. Show the user what wa
 Available metrics: `daily_high`, `daily_low`, `temp_high`, `temp_low`
 Operators: `>=`, `<=`, `>`, `<`, `==`
 
-Note: `soil_temp` exists in the schema but is always NULL (OpenWeatherMap limitation) — a soil_temp trigger will never fire. Use `daily_high` as a proxy.
+Note: `soil_temp` is not supported (no data source supplies it) and is rejected by validation. Use `daily_high` as a proxy for soil warming.
 
 ### Dependency
 ```json

@@ -233,7 +233,7 @@ Built and approved 2026-07-20. engine.derive_conditions() walks trigger_def for 
 
 
 ### Step 23: Remove dead and trap surface
-Status: not started
+Status: complete
 What it does: Five verified write-only or dead-end features removed or closed:
 (a) recurrence -- stored on activities, never read by the sync; recurring activities do not actually recur. Drop the column and all code/schema/skill references. Convention instead: annual backbones are re-authored via a yearly LLM conversation (fits the LLM-plans/cron-executes split better than a recurrence engine).
 (b) steps.condition -- stored, never evaluated. Drop the column and references.
@@ -244,6 +244,7 @@ What good looks like: Schema, tools, and skills describe only behavior that actu
 Test: defer an activity -- status watching, new date, cascaded steps, fires on new date. check_overdue with a skipped parent -- step not reported. load_domain with soil_temp metric -- rejected. Observation added -- appears in briefing-context output within the 7-day window.
 Builds on: Steps 3, 22
 Notes: Column drops land in the live DB via Step 25's migration; until then the code simply stops reading/writing the dead fields (compatible with the current schema).
+Built and approved 2026-07-20. Beyond spec on (e): moving trigger_date alone was not enough -- _check_trigger fires from trigger_def, so a deferred activity STILL would not re-fire (caught by the test-first run). New engine.defer_trigger_def() rewrites the trigger itself: calendar gets the new date, compound gets its calendar leg moved, condition/dependency get wrapped in a compound AND with an earliest-date gate. defer_activity now requires new_date, resets to watching, clears trigger_fired. Validation also rejects authored recurrence and step.condition fields (not just silently ignoring them) and rejects ANY unknown metric, not only soil_temp -- a typo can no longer silently never-fire. Parent-status filter applied to both check_overdue and briefing-context's due-today query. Live DB checked: zero 'deferred' rows exist, so Step 25's remap is a no-op. Observations section verified against the live DB. Deployed via gideon-gateway restart. Regression tests in tests/test_dead_surface.py (20 tests).
 
 
 ### Step 25: Database migration and relocation

@@ -26,7 +26,7 @@ def get_db():
 def row_to_dict(row):
     d = dict(row)
     for k, v in d.items():
-        if k.endswith("_json") or k in ("trigger_def", "recurrence", "condition", "definition", "forecast_json", "old_value", "new_value"):
+        if k.endswith("_json") or k in ("trigger_def", "definition", "forecast_json", "old_value", "new_value"):
             if isinstance(v, str):
                 try:
                     d[k] = json.loads(v)
@@ -98,6 +98,45 @@ def derive_conditions(trigger_def):
 
     walk(trigger_def)
     return rows
+
+
+def defer_trigger_def(trigger_def, new_date):
+    """Rewrite a trigger_def so it cannot fire before new_date.
+
+    calendar: move the date. compound: move the calendar leg (or add one).
+    condition/dependency: wrap in a compound AND with an earliest-date gate --
+    the weather/dependency logic still applies, but not before new_date."""
+    if isinstance(trigger_def, str):
+        trigger_def = json.loads(trigger_def)
+    t = trigger_def.get("type")
+    if t == "calendar":
+        out = dict(trigger_def)
+        out["date"] = new_date
+        return out
+    if t == "compound":
+        out = dict(trigger_def)
+        subs = []
+        moved = False
+        for sub in trigger_def.get("conditions", []):
+            if isinstance(sub, dict) and sub.get("type") == "calendar" and not moved:
+                s = dict(sub)
+                if "date" in s:
+                    s["date"] = new_date
+                else:
+                    s["after"] = new_date
+                subs.append(s)
+                moved = True
+            else:
+                subs.append(sub)
+        if not moved:
+            subs.insert(0, {"type": "calendar", "after": new_date})
+        out["conditions"] = subs
+        return out
+    return {
+        "type": "compound",
+        "operator": "AND",
+        "conditions": [{"type": "calendar", "after": new_date}, trigger_def],
+    }
 
 
 def compute_trigger_date(trigger_def):

@@ -14,13 +14,12 @@ CREATE TABLE IF NOT EXISTS activities (
   description     TEXT,
   group_name      TEXT,
   status          TEXT DEFAULT 'watching'
-                    CHECK(status IN ('watching','preparing','active','completed','skipped','deferred')),
+                    CHECK(status IN ('watching','preparing','active','completed','skipped')),
   trigger_type    TEXT CHECK(trigger_type IN ('calendar','condition','dependency','compound')),
   trigger_def     JSON,
   trigger_date    DATE,
   trigger_fired   DATETIME,
   completed_at    DATETIME,
-  recurrence      JSON,
   sort_order      INTEGER DEFAULT 0,
   created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -37,7 +36,6 @@ CREATE TABLE IF NOT EXISTS steps (
                     CHECK(status IN ('pending','due','completed','skipped')),
   due_date        DATE,
   completed_at    DATETIME,
-  condition       JSON,
   sort_order      INTEGER DEFAULT 0,
   created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -59,7 +57,6 @@ CREATE TABLE IF NOT EXISTS weather_log (
   recorded_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
   temp_high       REAL,
   temp_low        REAL,
-  soil_temp       REAL,
   conditions      TEXT,
   precipitation   REAL,
   forecast_json   JSON
