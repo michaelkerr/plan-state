@@ -12,6 +12,7 @@
 *.db
 *.db-wal
 *.db-shm
+*.db.pre-migration
 
 # Sync output (runtime)
 sync-output/*.json
