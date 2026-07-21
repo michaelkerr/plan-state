@@ -52,7 +52,9 @@ plan-state/
 ├── skills/                     # Hermes skills (loaded via external_dirs, live immediately)
 │   ├── plansync.md             # MCP tool workflow and trigger format reference
 │   ├── plansync-briefing.md    # Morning briefing generation instructions
-│   └── domain-authoring.md     # Guides LLM through domain planning conversation → load_domain
+│   └── domain-authoring.md     # Guides LLM through domain planning conversation → load_domain (canonical, shared with Claude)
+├── claude-skills/              # Claude-side skills, symlinked into ~/.claude/skills/
+│   └── plansync-domain-authoring/SKILL.md   # Thin wrapper: frontmatter + pointer to skills/domain-authoring.md (no duplicated rules)
 ├── sync-output/                # Daily JSON summaries (runtime, gitignored)
 └── docs/
     ├── STATUS.md               # Session-level state tracking

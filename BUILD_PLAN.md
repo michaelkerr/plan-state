@@ -258,12 +258,13 @@ Built and cut over 2026-07-20. New home: /opt/data/plansync/plansync.db (GIDEON_
 
 
 ### Step 30: Domain authoring Claude skill
-Status: not started
+Status: complete
 What it does: Port skills/domain-authoring.md as a Claude skill so authoring conversations in Claude desktop and Cowork follow the same rules as in Telegram. Nearly verbatim from the Hermes version -- same conversation flow, trigger-format reference, validation rules -- adapted for Claude's skill format. Requires Step 27 so the MCP tools are available.
 What good looks like: User says "help me plan my hunting season" in Claude desktop. Claude runs the same probing conversation, produces a valid domain definition, calls load_domain or add_activities via the MCP server. The activity_log shows source='claude'. The domain appears in the next morning's briefing with no manual transcription.
 Test: manual -- run one create and one amend conversation in Claude desktop; verify activities are in the DB, attributed to 'claude', and appear in get_upcoming.
 Builds on: Steps 14, 27
 Notes: Drift risk from maintaining two copies. If formats are compatible enough, keep one file and symlink into both agent directories. Otherwise extract shared trigger-reference.md.
+Built and approved 2026-07-21. Drift solved by not porting at all: claude-skills/plansync-domain-authoring/SKILL.md is a thin wrapper (YAML frontmatter for Claude skill discovery + directive to read the canonical skills/domain-authoring.md + Claude-specific notes on tool namespace and attribution). Rules exist in exactly one file, shared by both agents and validated by test_authoring_skill_examples.py. Installed by symlinking the repo directory into ~/.claude/skills/ (version-controlled, live-editable). Frontmatter was NOT added to the canonical file -- Hermes injects raw markdown into its prompt and the YAML block would be noise for the local model. Verified end-to-end with real conversations 2026-07-21: amend mode added an Olive group (3-activity lifecycle, compound winter/spring triggers) to Garden; create mode built the Hunting domain (22 activities, 10 groups, dependency chains for cameras/stands/plots); one conversational completion. All writes attributed source='claude'.
 
 
 ### Step 31: Dossier export and project sync
