@@ -268,12 +268,13 @@ Built and approved 2026-07-21. Drift solved by not porting at all: claude-skills
 
 
 ### Step 31: Dossier export and project sync
-Status: not started
+Status: complete
 What it does: A new script export_dossier.py that reads the DB and produces a markdown file per domain: current activities with status and estimated dates, recent completions and observations (last 14 days), active conditions, recent weather. Output to docs/dossiers/ in the repo. Refresh paths: (a) the 6 AM cron calls it after daily_sync.py; (b) a Cowork scheduled task stages the files and project_writes them to the claude.ai project. Hard rule: dossier docs are never hand-edited.
 What good looks like: A new Claude chat session reads yard/state.md and knows exactly what's active, what fired recently, what's coming up -- no tool calls or conversation history needed. Matches the DB within 24 hours.
 Test: Run export_dossier.py against the live DB; verify output contains all active activities, recent completions, weather. Verify round-trip through project_write/project_read.
 Builds on: Steps 3, 27
 Notes: Does not replace MCP tools for live queries. Its value is bootstrapping context for sessions without MCP access (mobile, web chat) or quick orientation before deeper tool calls.
+Built and approved 2026-07-21. sync/export_dossier.py renders one markdown file per domain (in-progress + open steps with overdue flags, watchlist with human-readable trigger descriptions incl. dependency names resolved, completions/observations last 14 days, conditions watch with live eval state, 7-day weather). Runs after daily_sync in the deployed cron wrapper; reports on stderr so the Telegram heartbeat stays clean; an export failure cannot fail the sync. docs/dossiers/ is gitignored (generated artifacts) and every file carries a do-not-hand-edit header. Verified live: 3 dossiers (garden/hunting/yard) rendered from the real DB. Part (b) -- claude.ai project sync via a scheduled task -- DEFERRED by user decision 2026-07-21: the Telegram briefing already covers the mobile case daily; revisit if plan state on MCP-less surfaces becomes a real need. Regression tests in tests/test_export_dossier.py (11 tests).
 
 
 ### Step 26: Documentation consolidation

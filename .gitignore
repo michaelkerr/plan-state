@@ -17,6 +17,9 @@
 # Sync output (runtime)
 sync-output/*.json
 
+# Dossiers (generated daily by export_dossier.py, never hand-edited)
+docs/dossiers/
+
 # Python
 __pycache__/
 *.pyc

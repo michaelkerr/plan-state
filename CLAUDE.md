@@ -43,6 +43,7 @@ plan-state/
 ├── sync/
 │   ├── daily_sync.py           # Deterministic sync pipeline (weather, conditions, triggers, cascade, overdue)
 │   ├── evening_nudge.py        # Evening "still open today" reminder (silent when clear)
+│   ├── export_dossier.py       # Per-domain markdown state files → docs/dossiers/ (generated, never hand-edited)
 │   └── requirements.txt        # requests
 ├── scripts/                    # Cron wrappers (copied to Hermes data dir by register.sh)
 │   ├── daily-sync.py           # Delegates to sync/daily_sync.py
