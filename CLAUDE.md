@@ -3,7 +3,7 @@
 # Plan-State
 
 ## What this is
-A condition-aware activity orchestrator for personal life domains (lawn care, gardening, hunting, health, home maintenance). It turns LLM-generated domain plans into managed, condition-aware tasks that re-cascade automatically when things slip, complete, or change. Deployed as a capability that registers into a running Hermes Agent instance (branded "Gideon") on a Mac Mini home server. Telegram is the sole task surface: a daily cron pipeline (zero LLM tokens) pulls weather, evaluates triggers, and cascades dates; an LLM morning briefing follows at 6:15, and a deterministic evening nudge at 5 PM lists anything still open (silent on clear days). Completions are conversational -- the user tells Gideon, which calls complete_activity.
+A condition-aware activity orchestrator for personal life domains (lawn care, gardening, hunting, health, home maintenance). It turns LLM-generated domain plans into managed, condition-aware tasks that re-cascade automatically when things slip, complete, or change. Deployed as a capability that registers into a running Hermes Agent instance (branded "Gideon") on a Mac Mini home server. Telegram is the sole task surface: a daily cron pipeline (zero LLM tokens) pulls weather, evaluates triggers, and cascades dates; an LLM morning briefing follows at 6:15, and a deterministic evening nudge at 5 PM lists anything still open (silent on clear days). Completions are conversational -- the user tells Gideon (Telegram) or Claude, which calls complete_activity. Hermes and Claude are peer agents of the same engine: both use the same MCP server and authoring skill, with writes distinguished by source attribution (docs/claude-setup.md covers the Claude side). Per-domain dossier files (docs/dossiers/, regenerated daily) orient sessions without MCP access.
 
 ## Build protocol
 - The build plan lives in BUILD_PLAN.md. Read it at the start of every session.
@@ -33,23 +33,24 @@ A condition-aware activity orchestrator for personal life domains (lawn care, ga
 ```
 plan-state/
 ├── register.sh                 # Installs app into running Hermes instance
-├── schema.sql                  # SQLite schema (6 tables)
+├── schema.sql                  # SQLite schema
 ├── init-db.py                  # Database initializer
 ├── plansync/
 │   └── engine.py               # Shared engine: get_db, log_change, cascade, trigger/step date math
 ├── mcp-server/
-│   ├── server.py               # MCP server (10 tools) over stdio JSON-RPC
+│   ├── server.py               # MCP server over stdio JSON-RPC
 │   └── requirements.txt        # mcp>=1.0.0
 ├── sync/
 │   ├── daily_sync.py           # Deterministic sync pipeline (weather, conditions, triggers, cascade, overdue)
 │   ├── evening_nudge.py        # Evening "still open today" reminder (silent when clear)
 │   ├── export_dossier.py       # Per-domain markdown state files → docs/dossiers/ (generated, never hand-edited)
 │   └── requirements.txt        # requests
-├── scripts/                    # Cron wrappers (copied to Hermes data dir by register.sh)
-│   ├── daily-sync.py           # Delegates to sync/daily_sync.py
+├── scripts/                    # Cron wrappers (copied to Hermes data dir by register.sh) + one-time migrations
+│   ├── daily-sync.py           # Delegates to sync/daily_sync.py, then sync/export_dossier.py
 │   ├── briefing-context.py     # Reads sync output + DB for LLM briefing
 │   ├── briefing-context.sh     # Shell wrapper for briefing-context.py
-│   └── evening-nudge.py        # Delegates to sync/evening_nudge.py
+│   ├── evening-nudge.py        # Delegates to sync/evening_nudge.py
+│   └── migrate-*.py            # One-time DB migrations (historical; already applied)
 ├── skills/                     # Hermes skills (loaded via external_dirs, live immediately)
 │   ├── plansync.md             # MCP tool workflow and trigger format reference
 │   ├── plansync-briefing.md    # Morning briefing generation instructions
@@ -58,10 +59,9 @@ plan-state/
 │   └── plansync-domain-authoring/SKILL.md   # Thin wrapper: frontmatter + pointer to skills/domain-authoring.md (no duplicated rules)
 ├── sync-output/                # Daily JSON summaries (runtime, gitignored)
 └── docs/
-    ├── STATUS.md               # Session-level state tracking
-    └── archive/
-        ├── v1-plan-sync-mvp-spec.md       # Original v1 spec (frozen)
-        └── v2-signals-boundaries-prd.md   # Shelved v2 architecture (archived 2026-07-19; revisit only if a full season surfaces a concrete v1 limitation)
+    ├── claude-setup.md         # Claude desktop MCP registration + verification
+    ├── dossiers/               # Per-domain state files (generated daily, gitignored, never hand-edited)
+    └── archive/                # Frozen history: v1 spec, shelved v2 PRD, pre-consolidation STATUS.md
 ```
 
 **Sibling repo**: `../gideon/` contains Hermes infrastructure (docker-compose.yml, .env). Plan-state registers itself into Gideon via `register.sh`. The LIVE Gideon config.yaml and data dir are at `$GIDEON_DATA_PATH` (/Users/michaelkerr/gideon-data, mounted at /opt/data) -- `../gideon/data/` is only the nightly backup target (mounted at /opt/data-backup); editing config there does nothing.
@@ -74,9 +74,8 @@ plan-state/
 - JSON fields in SQLite are stored as TEXT, deserialized on read via `row_to_dict()`
 - MCP tool responses are JSON wrapped in `types.TextContent`
 - Trigger definitions are JSON objects with a `type` field: `calendar`, `condition`, `dependency`, `compound`
-- The cron pipeline for the initial implementation is deterministic (zero LLM tokens). LLM reasoning happens only in Hermes sessions and the morning briefing
+- The cron pipeline is deterministic (zero LLM tokens). LLM reasoning happens only in interactive sessions and the morning briefing
 - Step dates cascade automatically from activity trigger dates (prep = trigger - lead_days, follow_up = trigger + lead_days)
-- Activity log captures all state changes with source attribution (`cron`, `hermes`)
 - Activities carry an optional free-form `group_name` for within-domain bundling (crop, bed, species). Display/organization only -- trigger logic comes from dependency chains, never groups
 - A domain = one location/weather context. Activity vs step: needs its own trigger (date, weather, dependency) → activity; fixed-offset chore around a triggered event → step
 - weather_log holds ONE row per location per local day, enforced by `UNIQUE(location, weather_date)` -- the upsert is `INSERT ... ON CONFLICT DO UPDATE`, so ad-hoc manual sync runs refresh rather than duplicate. Daily high/low are derived from the 3-hourly forecast via derive_daily_range(), not the snapshot
@@ -96,6 +95,7 @@ plan-state/
 
 ## Decisions
 - **Hermes Agent, not raw Claude sessions** -- persistent memory, skill system, Telegram integration, cron scheduling all come free
+- **AI-agnostic peer access (2026-07-20)** -- Claude registers the same MCP server via docker exec with PLANSYNC_CLIENT=claude; the Claude authoring skill is a thin wrapper over the canonical skills/domain-authoring.md (zero duplicated rules). Both agents write the same DB, distinguished only by activity_log.source
 - **SQLite, not Postgres** -- single-user system on a home server, no need for a database server
 - **Deterministic cron, not LLM-in-the-loop** -- weather eval, trigger logic, date cascading are all rule-based. Zero tokens, zero latency, zero external dependency beyond the weather API
 - **Telegram as sole task surface (2026-07-19)** -- Todoist integration removed: ~300 lines + the system's most fragile external dependency (API sunset incident) for a once-daily completion poll. Completions are conversational via complete_activity (immediate, captures notes); the evening nudge replaces due-time reminders

@@ -2,7 +2,7 @@
 
 ## Product summary
 
-Plan-state is a condition-aware activity orchestrator for personal life domains. It stores structured plans in SQLite, evaluates triggers daily against weather and calendar conditions, cascades dates through prep/follow-up chains, and delivers actionable briefings via Telegram. Deployed as a capability registering into a Hermes Agent instance (Gideon) on a Mac Mini. v1 is in production with two domains (Yard, Garden). The current focus is hardening (removing dead code, consolidating duplicated logic, fixing schema gaps) and making the system AI-agnostic so Claude and Hermes are equal peers of the same engine.
+Plan-state is a condition-aware activity orchestrator for personal life domains. It stores structured plans in SQLite, evaluates triggers daily against weather and calendar conditions, cascades dates through prep/follow-up chains, and delivers actionable briefings via Telegram. Deployed as a capability registering into a Hermes Agent instance (Gideon) on a Mac Mini. v1 is in production with three domains (Yard, Garden, Hunting). All planned steps are complete as of 2026-07-21: the engine is consolidated (shared plansync/engine.py, derived conditions, dead surface removed, DB on APFS with WAL), and the system is AI-agnostic -- Claude and Hermes are equal peers of the same engine, with per-domain dossiers for MCP-less sessions. New work gets new steps appended here.
 
 ## Steps
 ### Step 1: SQLite database and schema
@@ -195,7 +195,7 @@ Test: Pipeline runs clean end-to-end with no Todoist code or key. Nudge script u
 Builds on: Steps 3, 15, 18
 Notes: Verified 2026-07-20: zero Todoist references in server.py, daily_sync.py, schema.sql, register.sh, or any skill. evening_nudge.py exists and is registered. The todoist_sync table may still exist in the live DB as an orphan -- Step 25's migration drops it. Todoist references remain only in historical BUILD_PLAN notes.
 
-## Remaining steps
+## Hardening + AI-agnostic tracks (all complete 2026-07-20/21)
 Two parallel tracks, then a consolidation pass.
 Track A -- Engine hardening: 28 → 22 → 23 → 25 (consolidate code, then fix logic, then clean dead surface, then migrate schema)
 Track B -- AI-agnostic access: 27 → 30 → 31 (register Claude as peer, add skill, add dossier export)
@@ -278,9 +278,10 @@ Built and approved 2026-07-21. sync/export_dossier.py renders one markdown file 
 
 
 ### Step 26: Documentation consolidation
-Status: not started
+Status: complete
 What it does: Collapses overlapping state documents. CLAUDE.md stays as conventions + structure. BUILD_PLAN.md becomes the only live state doc -- absorb anything still true from STATUS.md, then archive STATUS.md. Remove the "Read STATUS.md first" convention. Delete every doc section that restates something the code already says (tool counts, table counts, file inventories). Docs carry only what code can't: intent, conventions, decisions.
 What good looks like: A fresh session needs exactly two files (CLAUDE.md, BUILD_PLAN.md) to be fully oriented, and nothing in either contradicts the code.
 Test: manual -- read-through: no stale claims, no restated code facts, no reference to archived docs as live.
 Builds on: All previous steps
 Notes: Do last so the consolidated docs describe the post-cleanup system once, not incrementally.
+Built and approved 2026-07-21. STATUS.md archived to docs/archive/v1-status-2026-07-19.md with a stale-claims banner (its durable session-log facts were already in step notes here). CLAUDE.md: summary describes the finished peer-agent system, tool/table counts removed from the structure tree (they restate code and drifted twice during the build), docs tree corrected, duplicate source-attribution bullet removed, AI-agnostic decision recorded. BUILD_PLAN product summary updated to completed state (three domains live). README de-counted and brought current. Read-through scan verified: zero live STATUS.md references, zero stale feature claims, zero restated counts. This closes the plan: all steps complete, v1 hardened and AI-agnostic in production.

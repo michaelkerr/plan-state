@@ -51,11 +51,12 @@ docker exec -it gideon-gateway hermes chat -q 'Use the plansync tools to list do
 
 ## What's built
 
-- **SQLite plan store**: 6-table schema tracking domains, activities, steps, conditions, weather, and an activity log
-- **MCP server**: 10 tools for reading and writing plan state (load/amend domains, update/complete/defer activities, record observations, query upcoming items and weather)
+- **SQLite plan store**: domains, activities, steps, condition cache, weather log, and a source-attributed activity log
+- **MCP server**: tools for reading and writing plan state (load/amend domains, update/complete/defer activities, record observations, query upcoming items and weather); shared by Hermes and Claude as peer agents, with writes attributed per client (see `docs/claude-setup.md`)
 - **Daily sync pipeline**: deterministic script -- weather pull, condition evaluation, trigger evaluation, date re-estimation, overdue check, summary output
-- **Morning briefing**: LLM-generated daily briefing from sync output
+- **Morning briefing**: LLM-generated daily briefing from sync output (includes recent field observations)
 - **Evening nudge**: deterministic reminder of anything still open today; silent on clear days
+- **Dossier export**: per-domain markdown state files (`docs/dossiers/`), regenerated daily, so sessions without MCP access can orient instantly
 - **Registration script**: One-command install into a running Hermes instance
 
 See [BUILD_PLAN.md](BUILD_PLAN.md) for current status and next steps.
