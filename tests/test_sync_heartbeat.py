@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
-"""Test the sync heartbeat honesty (Step 20): a run with errors must never
-report "ran clean" -- the daily Telegram message is the only dashboard."""
+"""Sync heartbeat contract.
+
+Step 20 (honesty): a run with errors must never report "ran clean".
+Step 32 (quiet): the heartbeat carries counts only -- item names belong to
+the 6:15 briefing, which reads the full JSON summary. Errors stay itemized.
+"""
 
 import os
 import sys
@@ -47,11 +51,11 @@ def test_multiline_error_reported_as_one_line():
 def test_changes_and_errors_both_reported():
     s = daily_sync.SyncSummary()
     s.triggers_fired.append({"name": "Summer Fungicide Watch", "reason": "condition met"})
-    s.errors.append("Todoist create failed for Water in application: 500")
+    s.errors.append("Weather pull failed for Murfreesboro: 500")
     out = s.to_stdout()
-    assert "Summer Fungicide Watch" in out
+    assert "triggers fired 1" in out
     assert "errors: 1" in out
-    assert "Todoist create failed" in out
+    assert "Weather pull failed" in out
 
 
 def test_changes_without_errors_has_no_error_section():
@@ -59,3 +63,51 @@ def test_changes_without_errors_has_no_error_section():
     s.triggers_fired.append({"name": "Summer Fungicide Watch", "reason": "condition met"})
     out = s.to_stdout()
     assert "errors" not in out
+
+
+# ── Step 32: counts only, no item detail ─────────────────────
+
+def _busy_summary():
+    s = daily_sync.SyncSummary()
+    s.triggers_fired.append({"name": "Summer Fungicide Watch", "reason": "condition met"})
+    s.dates_cascaded.append({"name": "Apply fungicide", "old_date": "2026-07-05", "new_date": "2026-07-08"})
+    s.overdue.append({"name": "Yard: Water in application", "due_date": "2026-07-15"})
+    s.overdue.append({"name": "Garden: Dig potatoes", "due_date": "2026-07-17"})
+    return s
+
+
+def test_heartbeat_reports_counts():
+    out = _busy_summary().to_stdout()
+    assert "triggers fired 1" in out
+    assert "dates cascaded 1" in out
+    assert "overdue 2" in out
+
+
+def test_heartbeat_contains_no_item_names():
+    out = _busy_summary().to_stdout()
+    for detail in ("Summer Fungicide Watch", "Apply fungicide", "Water in application",
+                   "Dig potatoes", "2026-07-15", "2026-07-17"):
+        assert detail not in out
+
+
+def test_heartbeat_is_short():
+    s = _busy_summary()
+    for i in range(30):
+        s.overdue.append({"name": f"Item {i}", "due_date": "2026-07-01"})
+    assert len(s.to_stdout().splitlines()) == 1
+
+
+def test_json_summary_keeps_full_detail():
+    # the briefing reads this file; item detail must survive there
+    d = _busy_summary().to_dict()
+    assert d["triggers_fired"][0]["name"] == "Summer Fungicide Watch"
+    assert d["dates_cascaded"][0]["new_date"] == "2026-07-08"
+    assert d["overdue"][0]["due_date"] == "2026-07-15"
+
+
+def test_errors_itemized_alongside_counts():
+    s = _busy_summary()
+    s.errors.append("Weather pull failed: timeout")
+    out = s.to_stdout()
+    assert "overdue 2" in out
+    assert "Weather pull failed: timeout" in out

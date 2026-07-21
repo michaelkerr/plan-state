@@ -48,25 +48,21 @@ class SyncSummary:
 
     def to_stdout(self):
         # Always emit something: cron output is delivered to Telegram, and an
-        # empty quiet day should still produce a heartbeat message. A run with
-        # errors must never claim clean -- this message is the only dashboard.
+        # empty quiet day should still produce a heartbeat message. The
+        # heartbeat answers "did the machinery run" -- counts only; item
+        # detail belongs to the 6:15 briefing, which reads the full JSON
+        # summary. A run with errors must never claim clean, and errors stay
+        # itemized (first line each).
         if self.is_empty() and not self.errors:
             return f"Plan sync {TODAY.isoformat()}: ran clean, no changes."
-        lines = ["---"]
-        lines.append(f"triggers_fired: {len(self.triggers_fired)}")
-        for t in self.triggers_fired:
-            lines.append(f'  - "{t["name"]}" ({t["reason"]})')
-        lines.append(f"dates_cascaded: {len(self.dates_cascaded)}")
-        for d in self.dates_cascaded:
-            lines.append(f'  - "{d["name"]}" moved to {d["new_date"]} (was {d["old_date"]})')
-        lines.append(f"overdue: {len(self.overdue)}")
-        for o in self.overdue:
-            lines.append(f'  - "{o["name"]}" was due {o["due_date"]}')
+        lines = [
+            f"Plan sync {TODAY.isoformat()}: triggers fired {len(self.triggers_fired)}, "
+            f"dates cascaded {len(self.dates_cascaded)}, overdue {len(self.overdue)}"
+        ]
         if self.errors:
             lines.append(f"errors: {len(self.errors)}")
             for e in self.errors:
                 lines.append(f"  - {str(e).splitlines()[0]}")
-        lines.append("---")
         return "\n".join(lines)
 
 
