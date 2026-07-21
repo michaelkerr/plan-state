@@ -193,7 +193,7 @@ What it does: Removed Todoist as a task surface; Telegram/Hermes chat is the sol
 What good looks like: Sync pipeline has zero Todoist references. Evening nudge fires only on days with open due items.
 Test: Pipeline runs clean end-to-end with no Todoist code or key. Nudge script unit-tested.
 Builds on: Steps 3, 15, 18
-Notes: Verified 2026-07-20: zero Todoist references in server.py, daily_sync.py, schema.sql, register.sh, or any skill. evening_nudge.py exists and is registered. The todoist_sync table may still exist in the live DB as an orphan -- Step 25's migration drops it. Todoist references remain only in historical BUILD_PLAN notes.
+Notes: Verified 2026-07-20: zero Todoist references in server.py, daily_sync.py, schema.sql, register.sh, or any skill. evening_nudge.py exists and is registered. CORRECTION 2026-07-21: the cron job was NOT actually registered on the live instance -- register.sh gained the block but was never re-run, so the 5 PM nudge never fired. Registered manually 2026-07-21 (job 5fa28acd7cef, 0 17 * * *, no-agent, telegram); script dry-run confirmed correct output (20 open items, 10-line cap). Lesson: adding a cron to register.sh does not register it -- run the hermes cron create directly or re-run register.sh as an explicit deploy step. The todoist_sync table may still exist in the live DB as an orphan -- Step 25's migration drops it. Todoist references remain only in historical BUILD_PLAN notes.
 
 ## Hardening + AI-agnostic tracks (all complete 2026-07-20/21)
 Two parallel tracks, then a consolidation pass.
