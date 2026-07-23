@@ -1,0 +1,15 @@
+{
+  "reference_doc": "domains/garden/reference.md",
+  "cycle_length": 6,
+  "start_year": 2027,
+  "garden_year_start_month": 9,
+  "sections": ["S1", "S2", "S3", "N1", "N2", "N3"],
+  "march": [
+    {"S1": "Strawberries (1)", "S2": "Alliums", "S3": "Solanaceae", "N1": "Cucurbits", "N2": "Legumes -> Brassicas", "N3": "Roots & chenopods"},
+    {"S1": "Strawberries (2)", "S2": "Legumes -> Brassicas", "S3": "Cucurbits", "N1": "Roots & chenopods", "N2": "Solanaceae", "N3": "Alliums"},
+    {"S1": "Strawberries (3)", "S2": "Solanaceae", "S3": "Roots & chenopods", "N1": "Alliums", "N2": "Cucurbits", "N3": "Legumes -> Brassicas"},
+    {"S1": "Legumes -> Brassicas", "S2": "Cucurbits", "S3": "Alliums", "N1": "Strawberries (1)", "N2": "Roots & chenopods", "N3": "Solanaceae"},
+    {"S1": "Solanaceae", "S2": "Roots & chenopods", "S3": "Legumes -> Brassicas", "N1": "Strawberries (2)", "N2": "Alliums", "N3": "Cucurbits"},
+    {"S1": "Cucurbits", "S2": "Alliums", "S3": "Solanaceae", "N1": "Strawberries (3)", "N2": "Legumes -> Brassicas", "N3": "Roots & chenopods"}
+  ]
+}

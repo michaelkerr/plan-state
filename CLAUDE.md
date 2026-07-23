@@ -3,7 +3,7 @@
 # Plan-State
 
 ## What this is
-A condition-aware activity orchestrator for personal life domains (lawn care, gardening, hunting, health, home maintenance). It turns LLM-generated domain plans into managed, condition-aware tasks that re-cascade automatically when things slip, complete, or change. Deployed as a capability that registers into a running Hermes Agent instance (branded "Gideon") on a Mac Mini home server. Telegram is the sole task surface: a daily cron pipeline (zero LLM tokens) pulls weather, evaluates triggers, and cascades dates; an LLM morning briefing follows at 6:15, and a deterministic evening nudge at 5 PM lists anything still open (silent on clear days). Completions are conversational -- the user tells Gideon (Telegram) or Claude, which calls complete_activity. Hermes and Claude are peer agents of the same engine: both use the same MCP server and authoring skill, with writes distinguished by source attribution (docs/claude-setup.md covers the Claude side). Per-domain dossier files (docs/dossiers/, regenerated daily) orient sessions without MCP access.
+A condition-aware activity orchestrator for personal life domains (lawn care, gardening, hunting, health, home maintenance). It turns LLM-generated domain plans into managed, condition-aware tasks that re-cascade automatically when things slip, complete, or change. Deployed as a capability that registers into a running Hermes Agent instance (branded "Gideon") on a Mac Mini home server. Telegram is the sole task surface: a daily cron pipeline (zero LLM tokens) pulls weather, evaluates triggers, and cascades dates; an LLM morning briefing follows at 6:15, and a deterministic evening nudge at 5 PM lists anything still open (silent on clear days). Completions are conversational -- the user tells Gideon (Telegram) or Claude, which calls complete_activity. Hermes and Claude are peer agents of the same engine: both use the same MCP server and authoring skill, with writes distinguished by source attribution (docs/claude-setup.md covers the Claude side). Per-domain dossier files (domains/{slug}/dossier.md, regenerated daily) orient sessions without MCP access.
 
 ## Build protocol
 - The build plan lives in BUILD_PLAN.md. Read it at the start of every session.
@@ -43,7 +43,7 @@ plan-state/
 ├── sync/
 │   ├── daily_sync.py           # Deterministic sync pipeline (weather, conditions, triggers, cascade, overdue)
 │   ├── evening_nudge.py        # Evening "still open today" reminder (silent when clear)
-│   ├── export_dossier.py       # Per-domain markdown state files → docs/dossiers/ (generated, never hand-edited)
+│   ├── export_dossier.py       # Per-domain markdown state files → domains/{slug}/dossier.md (generated)
 │   └── requirements.txt        # requests
 ├── scripts/                    # Cron wrappers (copied to Hermes data dir by register.sh) + one-time migrations
 │   ├── daily-sync.py           # Delegates to sync/daily_sync.py, then sync/export_dossier.py
@@ -57,10 +57,13 @@ plan-state/
 │   └── domain-authoring.md     # Guides LLM through domain planning conversation → load_domain (canonical, shared with Claude)
 ├── claude-skills/              # Claude-side skills, symlinked into ~/.claude/skills/
 │   └── plansync-domain-authoring/SKILL.md   # Thin wrapper: frontmatter + pointer to skills/domain-authoring.md (no duplicated rules)
+├── domains/                    # Per-domain directories: definition, reference docs, dossier
+│   ├── garden/                 # rotation.json, reference.md, garden.json, dossier.md (generated)
+│   ├── yard/                   # yard.json, dossier.md (generated)
+│   └── hunting/                # dossier.md (generated)
 ├── sync-output/                # Daily JSON summaries (runtime, gitignored)
 └── docs/
     ├── claude-setup.md         # Claude desktop MCP registration + verification
-    ├── dossiers/               # Per-domain state files (generated daily, gitignored, never hand-edited)
     └── archive/                # Frozen history: v1 spec, shelved v2 PRD, pre-consolidation STATUS.md
 ```
 
@@ -80,7 +83,7 @@ plan-state/
 - A domain = one location/weather context. Activity vs step: needs its own trigger (date, weather, dependency) → activity; fixed-offset chore around a triggered event → step
 - weather_log holds ONE row per location per local day, enforced by `UNIQUE(location, weather_date)` -- the upsert is `INSERT ... ON CONFLICT DO UPDATE`, so ad-hoc manual sync runs refresh rather than duplicate. Daily high/low are derived from the 3-hourly forecast via derive_daily_range(), not the snapshot
 - Conditions rows are DERIVED from trigger_def condition leaves at load/update time (engine.derive_conditions); definitions with an explicit `conditions` array are rejected. The conditions table is an evaluation cache (is_met/current_value), never authored directly
-- One authoring path: load_domain (new domain) / add_activities (grow a domain, including single activities); one modification path: update_activity / complete_activity / defer_activity. The single-shot create_domain and create_activity tools were removed (Step 22)
+- One authoring path: load_domain (new domain) / add_activities (grow a domain, including single activities); one modification path: update_activity / update_step / complete_activity / defer_activity. The single-shot create_domain and create_activity tools were removed (Step 22)
 - Deferral is a date move, not a status: defer_activity requires new_date, rewrites trigger_def via engine.defer_trigger_def (calendar date moved, compound calendar leg moved, condition/dependency wrapped with an earliest-date gate), and returns the activity to 'watching' so the cron re-fires it. There is no 'deferred' status
 - No recurrence, no step conditions, no soil_temp -- all were write-only surface; validation rejects them with actionable errors. Valid condition metrics: daily_high, daily_low, temp_high, temp_low (unknown metrics rejected)
 - Shared logic lives in `plansync/engine.py` (get_db, log_change, cascade_step_dates, compute_trigger_date, step_due_date, row_to_dict); server.py, daily_sync.py, and evening_nudge.py import it and must not define local copies (enforced by tests/test_engine_extraction.py). DB path and client identity resolve from env (`PLANSYNC_DB`, `PLANSYNC_CLIENT`) at call time
@@ -101,6 +104,9 @@ plan-state/
 - **Telegram as sole task surface (2026-07-19)** -- Todoist integration removed: ~300 lines + the system's most fragile external dependency (API sunset incident) for a once-daily completion poll. Completions are conversational via complete_activity (immediate, captures notes); the evening nudge replaces due-time reminders
 - **Local LLM for automated tasks** -- zero marginal cost, no external dependency for the morning briefing pipeline. Model is swappable via Hermes config.
 - **Split repos (plan-state + gideon)** -- Hermes infrastructure can be upgraded independently from this capability
+
+## Decisions (continued)
+- **Per-domain directories (2026-07-22)** -- each domain owns `domains/{slug}/` containing its definition JSON, reference docs, rotation config, and daily dossier. Eliminates cross-domain context bleed when Claude sessions connect only one domain's directory. The dossier exporter writes to `domains/{slug}/dossier.md`; the old `docs/dossiers/` output path is retired
 
 ## Inconsistencies
 None currently tracked.

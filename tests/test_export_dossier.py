@@ -74,25 +74,31 @@ def db_path(tmp_path):
 def run_export(db_path, out_dir):
     env = dict(os.environ)
     env["PLANSYNC_DB"] = db_path
-    env["PLANSYNC_DOSSIER_DIR"] = out_dir
+    env["PLANSYNC_DOMAINS_DIR"] = out_dir
     return subprocess.run(
         [sys.executable, os.path.join(ROOT, "sync", "export_dossier.py")],
         capture_output=True, text=True, env=env,
     )
 
 
+def dossier(out, slug):
+    return open(os.path.join(out, slug, "dossier.md")).read()
+
+
 @pytest.fixture
 def exported(db_path, tmp_path):
-    out = str(tmp_path / "dossiers")
+    out = str(tmp_path / "domains")
     result = run_export(db_path, out)
     assert result.returncode == 0, result.stderr
     return out, result
 
 
 class TestDossierExport:
-    def test_one_file_per_domain(self, exported):
+    def test_one_dossier_per_domain(self, exported):
         out, _ = exported
-        assert sorted(os.listdir(out)) == ["empty-domain.md", "test-yard.md"]
+        assert sorted(os.listdir(out)) == ["empty-domain", "test-yard"]
+        for slug in ("empty-domain", "test-yard"):
+            assert os.path.exists(os.path.join(out, slug, "dossier.md"))
 
     def test_stdout_is_silent(self, exported):
         # runs inside the telegram-delivered cron wrapper; stdout must stay clean
@@ -101,53 +107,53 @@ class TestDossierExport:
 
     def test_header_and_hand_edit_warning(self, exported):
         out, _ = exported
-        text = open(os.path.join(out, "test-yard.md")).read()
+        text = dossier(out, "test-yard")
         assert "# Test Yard" in text
         assert "Do not hand-edit" in text
         assert "Tall fescue, karst soil" in text
 
     def test_active_activity_with_steps(self, exported):
         out, _ = exported
-        text = open(os.path.join(out, "test-yard.md")).read()
+        text = dossier(out, "test-yard")
         assert "Fungicide Watch" in text
         assert "Apply fungicide" in text
         assert "2026-07-06" in text
 
     def test_watching_activity_with_date(self, exported):
         out, _ = exported
-        text = open(os.path.join(out, "test-yard.md")).read()
+        text = dossier(out, "test-yard")
         assert "Fall Overseed" in text
         assert "2026-09-05" in text
 
     def test_recent_completion_in_old_out(self, exported):
         out, _ = exported
-        text = open(os.path.join(out, "test-yard.md")).read()
+        text = dossier(out, "test-yard")
         assert "Spring Feed" in text
         assert "Ancient Task" not in text
 
     def test_observation_present(self, exported):
         out, _ = exported
-        text = open(os.path.join(out, "test-yard.md")).read()
+        text = dossier(out, "test-yard")
         assert "Armyworms near the back fence" in text
 
     def test_conditions_watch(self, exported):
         out, _ = exported
-        text = open(os.path.join(out, "test-yard.md")).read()
+        text = dossier(out, "test-yard")
         assert "daily_high" in text
         assert "94.9" in text
 
     def test_weather_section(self, exported):
         out, _ = exported
-        text = open(os.path.join(out, "test-yard.md")).read()
+        text = dossier(out, "test-yard")
         assert "Clear" in text
 
     def test_empty_domain_renders_without_error(self, exported):
         out, _ = exported
-        text = open(os.path.join(out, "empty-domain.md")).read()
+        text = dossier(out, "empty-domain")
         assert "# Empty Domain" in text
 
     def test_rerun_overwrites_cleanly(self, db_path, exported):
         out, _ = exported
         result = run_export(db_path, out)
         assert result.returncode == 0, result.stderr
-        assert sorted(os.listdir(out)) == ["empty-domain.md", "test-yard.md"]
+        assert sorted(os.listdir(out)) == ["empty-domain", "test-yard"]

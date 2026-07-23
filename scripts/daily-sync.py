@@ -10,6 +10,7 @@ import sys
 
 SYNC_SCRIPT = "/opt/plansync/sync/daily_sync.py"
 DOSSIER_SCRIPT = "/opt/plansync/sync/export_dossier.py"
+DOMAIN_JSON_SCRIPT = "/opt/plansync/sync/export_domain_json.py"
 
 env = os.environ.copy()
 env.setdefault("PLANSYNC_DB", "/opt/data/plansync/plansync.db")
@@ -25,5 +26,9 @@ result = subprocess.run(
 # is delivered to Telegram, so the exporter reports on stderr); a dossier
 # failure must not fail the sync heartbeat.
 subprocess.run([sys.executable, DOSSIER_SCRIPT], env=env, capture_output=False, stdout=sys.stderr)
+
+# Refresh per-domain JSON definitions (garden.json etc.) so the seed file
+# stays in sync with the DB after add_activities / update_activity mutations.
+subprocess.run([sys.executable, DOMAIN_JSON_SCRIPT], env=env, capture_output=False, stdout=sys.stderr)
 
 sys.exit(result.returncode)
