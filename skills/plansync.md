@@ -13,7 +13,8 @@ user reports completions conversationally.
 - load_domain(definition) -- bulk-load a complete domain with all activities and steps in one call (conditions derived from trigger_def)
 - add_activities(domain_id, activities) -- add activities to an existing domain; also the path for a single new activity (one-element array); activity_ref can reference activities already in the domain
 - update_activity(...) -- modify an existing activity (changing trigger_def re-derives conditions)
-- complete_activity(...) -- mark done, cascade follow-ups
+- update_step(...) -- modify an existing step (name, description, status, lead_days, step_type); completing a step sets completed_at, changing lead_days/step_type re-derives due_date
+- complete_activity(...) -- mark an activity done, cascade follow-ups and activate dependents
 - defer_activity(...) -- push dates, re-cascade
 - add_observation(...) -- record field observation
 - get_upcoming(days_ahead) -- cross-domain upcoming view
@@ -79,9 +80,12 @@ condition-type leaves of trigger_def -- never author them directly.
 
 - The cron sync job handles condition evaluation. Do NOT try to
   evaluate weather conditions during a planning conversation.
-- When the user says they finished something ("done with the
-  fungicide"), find the matching activity or step and call
-  complete_activity -- this is the ONLY completion path.
+- When the user says they finished something, distinguish activity
+  vs step. If they finished an entire activity ("done with the
+  fungicide"), call complete_activity. If they finished a specific
+  step ("thinned the cabbage seedlings"), call update_step with
+  status="completed". Look in get_domain_plan or get_upcoming to
+  find the matching step_id.
 - Dates cascade automatically when you defer or update trigger_dates.
 - If the user asks "what's coming up," call get_upcoming() rather
   than trying to reconstruct the schedule from memory.

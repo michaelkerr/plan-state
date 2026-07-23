@@ -151,6 +151,22 @@ async def list_tools() -> list[types.Tool]:
             },
         ),
         types.Tool(
+            name="update_step",
+            description="Update fields on an existing step. Changing status to 'completed' sets completed_at; changing lead_days or step_type re-derives due_date from the parent activity's trigger_date.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "step_id": {"type": "string"},
+                    "name": {"type": "string"},
+                    "description": {"type": "string"},
+                    "status": {"type": "string", "enum": ["pending", "due", "completed", "skipped"]},
+                    "lead_days": {"type": "integer", "minimum": 0},
+                    "step_type": {"type": "string", "enum": ["prep", "follow_up"]},
+                },
+                "required": ["step_id"],
+            },
+        ),
+        types.Tool(
             name="load_domain",
             description="Bulk-load a complete domain definition (domain + all activities, steps, conditions) in one atomic operation. Validates the definition, resolves activity_ref dependencies by name, and rolls back on any error.",
             inputSchema={
@@ -177,6 +193,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             return _get_domain_plan(conn, arguments["domain_id"])
         elif name == "update_activity":
             return _update_activity(conn, arguments)
+        elif name == "update_step":
+            return _update_step(conn, arguments)
         elif name == "complete_activity":
             return _complete_activity(conn, arguments)
         elif name == "defer_activity":
@@ -566,6 +584,74 @@ def _update_activity(conn, args) -> list[types.TextContent]:
         row_to_dict(s)
         for s in conn.execute("SELECT * FROM steps WHERE activity_id=? ORDER BY sort_order, due_date", (aid,)).fetchall()
     ]
+    return ok(updated)
+
+
+def _update_step(conn, args) -> list[types.TextContent]:
+    sid = args["step_id"]
+    current = conn.execute("SELECT * FROM steps WHERE id=?", (sid,)).fetchone()
+    if not current:
+        return ok({"error": f"Step {sid} not found"})
+    current = row_to_dict(current)
+
+    updatable = ["name", "description", "status", "lead_days", "step_type"]
+    sets, vals, changes = [], [], {}
+    for field in updatable:
+        if field in args and args[field] is not None:
+            val = args[field]
+            sets.append(f"{field}=?")
+            vals.append(val)
+            changes[field] = {"old": current.get(field), "new": val}
+
+    if not sets:
+        return ok({"error": "No fields to update"})
+
+    # Handle completion timestamp
+    if "status" in changes:
+        if changes["status"]["new"] == "completed":
+            sets.append("completed_at=?")
+            vals.append(datetime.utcnow().isoformat())
+        elif current.get("completed_at"):
+            # Un-completing: clear the timestamp
+            sets.append("completed_at=NULL")
+
+    # Re-derive due_date if lead_days or step_type changed
+    if "lead_days" in changes or "step_type" in changes:
+        activity = conn.execute(
+            "SELECT trigger_date FROM activities WHERE id=?", (current["activity_id"],)
+        ).fetchone()
+        if activity and activity["trigger_date"]:
+            new_step_type = args.get("step_type", current["step_type"])
+            new_lead_days = args.get("lead_days", current["lead_days"])
+            new_due = step_due_date(activity["trigger_date"], new_step_type, new_lead_days)
+            sets.append("due_date=?")
+            vals.append(new_due)
+
+    sets.append("updated_at=CURRENT_TIMESTAMP")
+    vals.append(sid)
+    conn.execute(f"UPDATE steps SET {', '.join(sets)} WHERE id=?", vals)
+
+    if "status" in changes:
+        log_change(conn, "step", sid, "status_change",
+                   {"status": changes["status"]["old"]},
+                   {"status": changes["status"]["new"]})
+    else:
+        log_change(conn, "step", sid, "manual_update",
+                   {k: v["old"] for k, v in changes.items()},
+                   {k: v["new"] for k, v in changes.items()})
+
+    conn.commit()
+
+    updated = conn.execute("SELECT * FROM steps WHERE id=?", (sid,)).fetchone()
+    updated = row_to_dict(updated)
+    # Include parent context so the caller knows what activity this belongs to
+    activity = conn.execute(
+        "SELECT id, name, group_name FROM activities WHERE id=?",
+        (updated["activity_id"],),
+    ).fetchone()
+    if activity:
+        updated["activity_name"] = activity["name"]
+        updated["activity_group"] = activity["group_name"]
     return ok(updated)
 
 
