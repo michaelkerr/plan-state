@@ -91,7 +91,12 @@ Test: Regression: existing sync tests pass. Trigger fire via transition() produc
 Builds on: Step 36
 
 ### Step 38: Kill plan-sync Telegram delivery
-Status: not started
+Status: built (awaiting manual verification)
+Notes: Live job e310e6b9a114 switched via `hermes cron edit --deliver local`
+on 2026-07-24; register.sh updated so fresh registrations use local delivery.
+Verify on 2026-07-25: no 6:00 AM Telegram message, 6:15 briefing still has
+full content (briefing reads sync-output JSON, unaffected by delivery
+target), 5 PM nudge unchanged.
 What it does: Change the plan-sync cron job's delivery from Telegram to local (file-only). The sync still runs at 6:00 AM, evaluates triggers, cascades dates, writes JSON output. The heartbeat message no longer goes to Telegram. Morning briefing (6:15) and evening nudge (5:00 PM) remain.
 What good looks like: No 6:00 AM Telegram message. Briefing and nudge unaffected. Sync output JSON still written for briefing-context to read.
 Test: Manual -- verify no Telegram message at 6:00, verify briefing at 6:15 still has full content.
