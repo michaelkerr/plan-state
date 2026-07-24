@@ -37,12 +37,15 @@ def row_to_dict(row):
     return d
 
 
-def log_change(conn, item_type, item_id, action, old_value, new_value, source=None):
+def log_change(conn, item_type, item_id, action, old_value, new_value, source=None, batch_id=None):
+    # batch_id groups every log entry produced by one operation (e.g. an
+    # activity completion plus its cascaded step/dependency changes) into a
+    # single reversible unit for undo
     if source is None:
         source = os.environ.get("PLANSYNC_CLIENT", "hermes")
     conn.execute(
-        "INSERT INTO activity_log (item_type, item_id, action, old_value, new_value, source) VALUES (?,?,?,?,?,?)",
-        (item_type, item_id, action, json.dumps(old_value), json.dumps(new_value), source),
+        "INSERT INTO activity_log (item_type, item_id, action, old_value, new_value, source, batch_id) VALUES (?,?,?,?,?,?,?)",
+        (item_type, item_id, action, json.dumps(old_value), json.dumps(new_value), source, batch_id),
     )
 
 

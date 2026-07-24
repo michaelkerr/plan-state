@@ -1,6 +1,6 @@
 # Garden -- plan state
 
-Generated 2026-07-23T06:01:20 by export_dossier.py from the live plansync DB.
+Generated 2026-07-24T06:00:06 by export_dossier.py from the live plansync DB.
 Do not hand-edit: this file is regenerated daily by the 6 AM sync. For live
 queries or changes, use the plansync MCP tools.
 
@@ -25,8 +25,9 @@ queries or changes, use the plansync MCP tools.
   - [ ] Certified seed garlic (2 lb, hardneck+softneck) -- due 2026-07-15 (OVERDUE)
   - [ ] Cowpea inoculant (Bradyrhizobium, cowpea/peanut group) -- due 2026-07-15 (OVERDUE)
   - [ ] Pinkeye Purple Hull pea seed (bush type) -- due 2026-07-15 (OVERDUE)
-  - [ ] Daikon / tillage radish seed -- due 2026-07-15 (OVERDUE)
+  - [ ] Watermelon radish (Beauty Heart) + Hakurei turnip seed -- due 2026-07-15 (OVERDUE)
   - [ ] Mache / corn salad seed (Vit) -- due 2026-07-15 (OVERDUE)
+  - [ ] Spinach (Bloomsdale Long Standing) + romaine lettuce seed -- due 2026-07-15 (OVERDUE)
 - **Sow Cabbage Indoors** [N2] -- preparing, fired 2026-07-16, target 2026-07-17
   - [ ] Prepare cells with clean seed-starting mix -- due 2026-07-16 (OVERDUE)
   - [ ] Sow 1/4 in deep, germinate at 75F -- due 2026-07-17 (OVERDUE)
@@ -94,15 +95,15 @@ queries or changes, use the plansync MCP tools.
 - 2026-07-21: Cowpea inoculant (Bradyrhizobium, cowpea/peanut group) ordered and received. Pinkeye Purple Hull pea seed (bush type) ordered.
 
 ## Conditions watch
-- Move Olive Indoors for Winter: daily_low <= 35 -- not met, currently 69.96
-- Move Olive Back Outside: daily_low >= 40 x3d -- MET, currently 69.96
+- Move Olive Indoors for Winter: daily_low <= 35 -- not met, currently 64.92
+- Move Olive Back Outside: daily_low >= 40 x3d -- MET, currently 64.92
 
 ## Recent weather (last 7 days)
-- 2026-07-23: high 84.18, low 69.96, Clouds
+- 2026-07-24: high 86.86, low 64.92, Clouds
+- 2026-07-23: high 82.18, low 74.62, Clouds
 - 2026-07-22: high 88.99, low 73.02, Clouds
 - 2026-07-21: high 93.25, low 81.07, Clouds
 - 2026-07-20: high 90.9, low 79.07, Clouds
 - 2026-07-19: high 89.51, low 73.18, Clouds
 - 2026-07-18: high 89.94, low 73.13, Clouds
 - 2026-07-17: high 90.34, low 72.36, Clear
-- 2026-07-16: high 87.98, low 71.69, Clouds

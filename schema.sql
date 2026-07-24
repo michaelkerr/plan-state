@@ -72,7 +72,8 @@ CREATE TABLE IF NOT EXISTS activity_log (
   action          TEXT NOT NULL CHECK(action IN ('status_change','date_cascade','trigger_fire','manual_update','created','observation')),
   old_value       JSON,
   new_value       JSON,
-  source          TEXT NOT NULL CHECK(source IN ('cron','hermes','claude','human'))
+  source          TEXT NOT NULL CHECK(source IN ('cron','hermes','claude','human')),
+  batch_id        TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_activities_domain ON activities(domain_id);
@@ -81,3 +82,4 @@ CREATE INDEX IF NOT EXISTS idx_steps_activity ON steps(activity_id);
 CREATE INDEX IF NOT EXISTS idx_conditions_activity ON conditions(activity_id);
 CREATE INDEX IF NOT EXISTS idx_weather_location ON weather_log(location, recorded_at);
 CREATE INDEX IF NOT EXISTS idx_activity_log_item ON activity_log(item_type, item_id);
+CREATE INDEX IF NOT EXISTS idx_activity_log_batch ON activity_log(batch_id);

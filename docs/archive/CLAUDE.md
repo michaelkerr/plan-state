@@ -67,7 +67,7 @@ plan-state/
     └── archive/                # Frozen history: v1 spec, shelved v2 PRD, pre-consolidation STATUS.md
 ```
 
-**Sibling repo**: `../gideon/` contains Hermes infrastructure (docker-compose.yml, .env). Plan-state registers itself into Gideon via `register.sh`. The LIVE Gideon config.yaml and data dir are at `$GIDEON_DATA_PATH` (/Users/michaelkerr/gideon-data, mounted at /opt/data) -- `../gideon/data/` is only the nightly backup target (mounted at /opt/data-backup); editing config there does nothing. The running containers are `gideon-gateway` (main agent -- use `docker exec gideon-gateway ...` for in-container commands) and `gideon-dashboard`; "gideon" alone is the compose project name, not a container.
+**Sibling repo**: `../gideon/` contains Hermes infrastructure (docker-compose.yml, .env). Plan-state registers itself into Gideon via `register.sh`. The LIVE Gideon config.yaml and data dir are at `$GIDEON_DATA_PATH` (/Users/michaelkerr/gideon-data, mounted at /opt/data) -- `../gideon/data/` is only the nightly backup target (mounted at /opt/data-backup); editing config there does nothing.
 
 **Volume mounts**: The entire plan-state repo is volume-mounted into the container at `/opt/plansync/`. Skills are loaded via Hermes `external_dirs` (live edits). MCP server and sync code are accessed directly via the mount (live edits). Scripts are thin wrappers copied by `register.sh` — they delegate to the volume-mounted code, so the actual logic is still live-editable. The MCP server is configured in Gideon's `config.yaml`; `register.sh` handles one-time setup (DB init, pip deps, cron registration) plus script copying.
 
@@ -88,7 +88,6 @@ plan-state/
 - No recurrence, no step conditions, no soil_temp -- all were write-only surface; validation rejects them with actionable errors. Valid condition metrics: daily_high, daily_low, temp_high, temp_low (unknown metrics rejected)
 - Shared logic lives in `plansync/engine.py` (get_db, log_change, cascade_step_dates, compute_trigger_date, step_due_date, row_to_dict); server.py, daily_sync.py, and evening_nudge.py import it and must not define local copies (enforced by tests/test_engine_extraction.py). DB path and client identity resolve from env (`PLANSYNC_DB`, `PLANSYNC_CLIENT`) at call time
 - activity_log source attribution: `cron` (sync pipeline, passed explicitly), `hermes`/`claude` (via PLANSYNC_CLIENT env on the MCP server), `human` (reserved)
-- activity_log.batch_id groups all log entries produced by one operation (completion + cascaded steps + dependency fires) into one reversible unit for undo (Step 45). log_change takes optional batch_id; standalone entries stay NULL
 
 ## Do not
 - Do not use class components or ORM -- raw SQL via sqlite3, schemas in schema.sql
@@ -108,9 +107,6 @@ plan-state/
 
 ## Decisions (continued)
 - **Per-domain directories (2026-07-22)** -- each domain owns `domains/{slug}/` containing its definition JSON, reference docs, rotation config, and daily dossier. Eliminates cross-domain context bleed when Claude sessions connect only one domain's directory. The dossier exporter writes to `domains/{slug}/dossier.md`; the old `docs/dossiers/` output path is retired
-- **v2: plan-management-first architecture (2026-07-24)** -- v1 was built trigger-first (trigger_def is the most complex structure, trigger evaluation the most complex code). v2 inverts this: the plan hierarchy (domain/activity/step) is the foundation with simple CRUD, triggers are optional enrichment, step visibility is independent of parent activity status, and all state changes route through explicit transition tables with a cascade reactor. Rationale and full design in plansync-redesign.md (project doc). v1 build history archived to docs/archive/BUILD_PLAN_V1.md
 
 ## Inconsistencies
-- **Step visibility depends on parent activity status** -- all current queries (evening_nudge, briefing-context, get_upcoming) filter steps by a.status IN (...). Follow-up steps on completed activities are invisible. Tracked until Phase 2 (Step 39) lands the actionable_items view.
-- **Four independent "what's open" query definitions** -- daily_sync, evening_nudge, briefing-context, and get_upcoming each compose their own SQL with different filters and date comparisons. Tracked until Phase 2 consolidates them.
-- **complete_activity ignores steps with status='due'** -- line 672 in server.py only auto-completes prep steps with status='pending'. Steps promoted to 'due' by the overdue checker are orphaned on activity completion. Tracked until Phase 1 (Step 36) migrates to transition().
+None currently tracked.
