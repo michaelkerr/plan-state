@@ -7,7 +7,7 @@ import os
 import sqlite3
 import sys
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -21,8 +21,11 @@ from plansync.engine import (  # noqa: E402
     derive_conditions,
     get_db,
     log_change,
+    new_batch_id,
+    react,
     row_to_dict,
     step_due_date,
+    transition,
 )
 
 server = Server("plansync")
@@ -587,6 +590,25 @@ def _update_activity(conn, args) -> list[types.TextContent]:
     return ok(updated)
 
 
+def _step_status_event(current, desired):
+    """Map a requested step status to the state-machine event that reaches it.
+
+    Returns (event, context) or (None, None) when no transition exists."""
+    named = {
+        ("pending", "completed"): "complete",
+        ("due", "completed"): "complete",
+        ("pending", "due"): "promote",
+        ("pending", "skipped"): "skip",
+        ("due", "skipped"): "skip",
+        ("completed", "pending"): "uncomplete",
+    }
+    if (current, desired) in named:
+        return named[(current, desired)], {}
+    if current in ("completed", "skipped"):
+        return "revert", {"to_status": desired}
+    return None, None
+
+
 def _update_step(conn, args) -> list[types.TextContent]:
     sid = args["step_id"]
     current = conn.execute("SELECT * FROM steps WHERE id=?", (sid,)).fetchone()
@@ -594,7 +616,7 @@ def _update_step(conn, args) -> list[types.TextContent]:
         return ok({"error": f"Step {sid} not found"})
     current = row_to_dict(current)
 
-    updatable = ["name", "description", "status", "lead_days", "step_type"]
+    updatable = ["name", "description", "lead_days", "step_type"]
     sets, vals, changes = [], [], {}
     for field in updatable:
         if field in args and args[field] is not None:
@@ -603,42 +625,43 @@ def _update_step(conn, args) -> list[types.TextContent]:
             vals.append(val)
             changes[field] = {"old": current.get(field), "new": val}
 
-    if not sets:
+    desired_status = args.get("status")
+    if not sets and desired_status is None:
         return ok({"error": "No fields to update"})
 
-    # Handle completion timestamp
-    if "status" in changes:
-        if changes["status"]["new"] == "completed":
-            sets.append("completed_at=?")
-            vals.append(datetime.utcnow().isoformat())
-        elif current.get("completed_at"):
-            # Un-completing: clear the timestamp
-            sets.append("completed_at=NULL")
+    batch = new_batch_id()
 
-    # Re-derive due_date if lead_days or step_type changed
-    if "lead_days" in changes or "step_type" in changes:
-        activity = conn.execute(
-            "SELECT trigger_date FROM activities WHERE id=?", (current["activity_id"],)
-        ).fetchone()
-        if activity and activity["trigger_date"]:
-            new_step_type = args.get("step_type", current["step_type"])
-            new_lead_days = args.get("lead_days", current["lead_days"])
-            new_due = step_due_date(activity["trigger_date"], new_step_type, new_lead_days)
-            sets.append("due_date=?")
-            vals.append(new_due)
+    if sets:
+        # Re-derive due_date if lead_days or step_type changed
+        if "lead_days" in changes or "step_type" in changes:
+            activity = conn.execute(
+                "SELECT trigger_date FROM activities WHERE id=?", (current["activity_id"],)
+            ).fetchone()
+            if activity and activity["trigger_date"]:
+                new_step_type = args.get("step_type", current["step_type"])
+                new_lead_days = args.get("lead_days", current["lead_days"])
+                new_due = step_due_date(activity["trigger_date"], new_step_type, new_lead_days)
+                sets.append("due_date=?")
+                vals.append(new_due)
 
-    sets.append("updated_at=CURRENT_TIMESTAMP")
-    vals.append(sid)
-    conn.execute(f"UPDATE steps SET {', '.join(sets)} WHERE id=?", vals)
-
-    if "status" in changes:
-        log_change(conn, "step", sid, "status_change",
-                   {"status": changes["status"]["old"]},
-                   {"status": changes["status"]["new"]})
-    else:
+        sets.append("updated_at=CURRENT_TIMESTAMP")
+        vals.append(sid)
+        conn.execute(f"UPDATE steps SET {', '.join(sets)} WHERE id=?", vals)
         log_change(conn, "step", sid, "manual_update",
                    {k: v["old"] for k, v in changes.items()},
-                   {k: v["new"] for k, v in changes.items()})
+                   {k: v["new"] for k, v in changes.items()},
+                   batch_id=batch)
+
+    if desired_status is not None and desired_status != current["status"]:
+        event, context = _step_status_event(current["status"], desired_status)
+        if event is None:
+            return ok({"error": f"cannot move step {sid} from '{current['status']}' "
+                                f"to '{desired_status}': no such transition"})
+        context["batch_id"] = batch
+        try:
+            transition(conn, "step", sid, event, context)
+        except ValueError as e:
+            return ok({"error": str(e)})
 
     conn.commit()
 
@@ -661,50 +684,23 @@ def _complete_activity(conn, args) -> list[types.TextContent]:
     if not current:
         return ok({"error": f"Activity {aid} not found"})
 
-    now = datetime.utcnow().isoformat()
-    conn.execute(
-        "UPDATE activities SET status='completed', completed_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-        (now, aid),
-    )
-    log_change(conn, "activity", aid, "status_change", {"status": current["status"]}, {"status": "completed", "notes": args.get("notes")})
+    batch = new_batch_id()
+    context = {"batch_id": batch}
+    if args.get("notes"):
+        context["extra"] = {"notes": args["notes"]}
+    try:
+        events = transition(conn, "activity", aid, "complete", context)
+    except ValueError as e:
+        return ok({"error": str(e)})
 
-    conn.execute(
-        "UPDATE steps SET status='completed', completed_at=? WHERE activity_id=? AND step_type='prep' AND status='pending'",
-        (now, aid),
-    )
-
-    follow_ups = conn.execute(
-        "SELECT id, name, lead_days FROM steps WHERE activity_id=? AND step_type='follow_up' AND status='pending'",
-        (aid,),
-    ).fetchall()
-    cascaded = []
-    for fu in follow_ups:
-        due = (date.today() + timedelta(days=fu["lead_days"])).isoformat()
-        conn.execute("UPDATE steps SET due_date=?, status='due', updated_at=CURRENT_TIMESTAMP WHERE id=?", (due, fu["id"]))
-        cascaded.append({"id": fu["id"], "name": fu["name"], "due_date": due})
-
-    dependents = conn.execute(
-        "SELECT id, name, trigger_def FROM activities WHERE trigger_type='dependency' AND status='watching'",
-    ).fetchall()
-    activated = []
-    for dep in dependents:
-        tdef = json.loads(dep["trigger_def"]) if isinstance(dep["trigger_def"], str) else dep["trigger_def"]
-        if tdef.get("activity_id") == aid and tdef.get("event") == "completed":
-            offset = tdef.get("offset_days", 0)
-            new_trigger = (date.today() + timedelta(days=offset)).isoformat()
-            conn.execute(
-                "UPDATE activities SET status='preparing', trigger_date=?, trigger_fired=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                (new_trigger, now, dep["id"]),
-            )
-            cascade_step_dates(conn, dep["id"], new_trigger)
-            log_change(conn, "activity", dep["id"], "trigger_fire", {"status": "watching"}, {"status": "preparing", "trigger_date": new_trigger})
-            activated.append({"id": dep["id"], "name": dep["name"], "trigger_date": new_trigger})
-
+    result = react(conn, events, batch)
     conn.commit()
     return ok({
         "completed": aid,
-        "follow_up_steps_due": cascaded,
-        "dependent_activities_activated": activated,
+        "batch_id": batch,
+        "prep_steps_completed": result["steps_completed"],
+        "follow_up_steps_due": result["follow_ups_promoted"],
+        "dependent_activities_activated": result["dependencies_fired"],
     })
 
 
@@ -723,19 +719,26 @@ def _defer_activity(conn, args) -> list[types.TextContent]:
     # so the cron re-fires it on the new date (evaluate_triggers only scans
     # 'watching'; a fired activity being deferred needs its trigger_fired reset).
     # trigger_def must move too -- _check_trigger fires from it, not trigger_date.
+    batch = new_batch_id()
+    try:
+        transition(conn, "activity", aid, "defer", {"batch_id": batch})
+    except ValueError as e:
+        return ok({"error": str(e)})
+
     old_tdef = row_to_dict(current)["trigger_def"]
     new_tdef = defer_trigger_def(old_tdef, new_date)
     conn.execute(
-        "UPDATE activities SET status='watching', trigger_fired=NULL, trigger_date=?, trigger_def=?, trigger_type=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        "UPDATE activities SET trigger_fired=NULL, trigger_date=?, trigger_def=?, trigger_type=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
         (new_date, json.dumps(new_tdef), new_tdef["type"], aid),
     )
     log_change(
         conn, "activity", aid, "manual_update",
-        {"status": current["status"], "trigger_date": current["trigger_date"], "trigger_def": old_tdef},
-        {"status": "watching", "trigger_date": new_date, "trigger_def": new_tdef, "reason": reason},
+        {"trigger_date": current["trigger_date"], "trigger_def": old_tdef},
+        {"trigger_date": new_date, "trigger_def": new_tdef, "reason": reason},
+        batch_id=batch,
     )
 
-    cascade_step_dates(conn, aid, new_date)
+    cascade_step_dates(conn, aid, new_date, batch_id=batch)
 
     conn.commit()
 

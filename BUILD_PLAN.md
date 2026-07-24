@@ -60,7 +60,17 @@ Test: Unit tests on transition(): valid transitions succeed, invalid transitions
 Builds on: Step 34
 
 ### Step 36: Migrate server.py to use transition()
-Status: not started
+Status: complete
+Notes: _complete_activity collapsed to transition+react (~20 lines); response
+keeps v1 keys and adds batch_id + prep_steps_completed. Both v1 bugs fixed:
+'due' prep steps auto-complete, invalid completions (watching/completed)
+rejected with the state named. _defer_activity: status via transition(defer),
+trigger-field rewrite stays raw (not status columns), all entries share one
+batch. _update_step: status changes map through _step_status_event() --
+no-table moves (due->pending) now error instead of writing silently;
+skipped/completed recover via revert. update_activity's raw status field is
+untouched (out of scope; revert/undo lands in Step 45). Last utcnow() in
+server.py removed. Tests in tests/test_transition_migration.py (14).
 What it does: Rewrites _complete_activity, _update_step (status changes only), and _defer_activity to call transition() + react() instead of issuing raw status UPDATEs. Fixes two v1 bugs as a side effect: (1) complete_activity now handles steps with status='due' (the transition table defines (due, parent_complete) -> completed); (2) follow-up steps on completed activities are promoted to 'due' and remain visible because step visibility no longer depends on parent status (prep for Step 39). Also wires batch_id through all these paths so undo can group them.
 What good looks like: Existing test suites pass. The two v1 bugs are fixed (new tests confirm). _complete_activity, _update_step, _defer_activity contain zero raw status UPDATE statements.
 Test: Regression: all existing tests pass. New: complete an activity with prep steps in 'due' status -- they auto-complete (was broken). Complete an activity with follow-up steps -- they're promoted to 'due' with correct dates and their log entries share the activity's batch_id. Defer an activity -- status returns to 'watching', trigger_def rewritten, steps re-cascaded. Invalid transition (complete a 'watching' activity directly) -- rejected with error, not silently applied.
