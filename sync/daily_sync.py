@@ -266,21 +266,20 @@ def evaluate_triggers(conn, summary):
 
         fired, reason = _check_trigger(conn, act, tdef)
         if fired:
-            has_prep = conn.execute(
-                "SELECT COUNT(*) as cnt FROM steps WHERE activity_id=? AND step_type='prep'", (act["id"],)
-            ).fetchone()["cnt"]
-            new_status = "preparing" if has_prep > 0 else "active"
-
+            # One batch per fire: the status change and its step-date cascade
+            # revert together
+            batch = engine.new_batch_id()
             trigger_date = act["trigger_date"] or TODAY.isoformat()
             conn.execute(
-                "UPDATE activities SET status=?, trigger_fired=?, trigger_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                (new_status, NOW.isoformat(), trigger_date, act["id"]),
+                "UPDATE activities SET trigger_fired=?, trigger_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (NOW.isoformat(), trigger_date, act["id"]),
             )
-            engine.log_change(conn, "activity", act["id"], "trigger_fire",
-                        {"status": "watching"}, {"status": new_status, "reason": reason}, source="cron")
+            engine.transition(conn, "activity", act["id"], "trigger_fire",
+                              {"source": "cron", "batch_id": batch,
+                               "action": "trigger_fire", "extra": {"reason": reason}})
 
             if trigger_date:
-                _cascade_steps(conn, act["id"], trigger_date, summary)
+                _cascade_steps(conn, act["id"], trigger_date, summary, batch_id=batch)
 
             summary.triggers_fired.append({"name": act["name"], "reason": reason})
 
@@ -346,9 +345,9 @@ def _check_trigger(conn, act, tdef):
     return False, ""
 
 
-def _cascade_steps(conn, activity_id, trigger_date_str, summary):
+def _cascade_steps(conn, activity_id, trigger_date_str, summary, batch_id=None):
     engine.cascade_step_dates(
-        conn, activity_id, trigger_date_str, source="cron",
+        conn, activity_id, trigger_date_str, source="cron", batch_id=batch_id,
         on_change=lambda s, old_due, new_due: summary.dates_cascaded.append(
             {"name": s["name"], "old_date": old_due, "new_date": new_due}),
     )
@@ -447,9 +446,12 @@ def check_overdue(conn, summary):
         (TODAY.isoformat(),),
     ).fetchall()
 
+    # One batch for the whole overdue pass: the day's promotions revert together
+    batch = engine.new_batch_id()
     for s in overdue:
         if s["status"] != "due":
-            conn.execute("UPDATE steps SET status='due', updated_at=CURRENT_TIMESTAMP WHERE id=?", (s["id"],))
+            engine.transition(conn, "step", s["id"], "overdue",
+                              {"source": "cron", "batch_id": batch})
         summary.overdue.append({
             "name": f'{s["activity_name"]}: {s["name"]}',
             "due_date": s["due_date"],

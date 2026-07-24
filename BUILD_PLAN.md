@@ -77,7 +77,14 @@ Test: Regression: all existing tests pass. New: complete an activity with prep s
 Builds on: Step 35
 
 ### Step 37: Migrate daily_sync.py to use transition()
-Status: not started
+Status: complete
+Notes: evaluate_triggers fires via transition(trigger_fire) -- the
+preparing-vs-active resolution now lives only in engine._trigger_fire_target.
+One batch per fire (status change + step cascade revert together);
+check_overdue promotes via transition(overdue) with one batch for the whole
+pass. Overdue promotions are now logged (v1 wrote them silently);
+trigger_fired/trigger_date remain raw column updates (not status). Tests in
+tests/test_sync_transition.py (10).
 What it does: Rewrites evaluate_triggers (trigger fire) and check_overdue (pending -> due promotion) in daily_sync.py to call transition() instead of raw UPDATEs. The sync pipeline now uses the same state machine as the MCP server -- a trigger fire in the cron and a manual completion in Telegram go through identical code paths.
 What good looks like: Sync pipeline runs clean end-to-end. Overdue steps get their status set via transition(). Trigger fires go through transition(). All changes logged with batch_ids.
 Test: Regression: existing sync tests pass. Trigger fire via transition() produces the same DB state as the old code. Overdue check via transition() produces the same results.
