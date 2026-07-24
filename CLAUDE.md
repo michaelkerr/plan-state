@@ -89,6 +89,7 @@ plan-state/
 - Shared logic lives in `plansync/engine.py` (get_db, log_change, cascade_step_dates, compute_trigger_date, step_due_date, row_to_dict); server.py, daily_sync.py, and evening_nudge.py import it and must not define local copies (enforced by tests/test_engine_extraction.py). DB path and client identity resolve from env (`PLANSYNC_DB`, `PLANSYNC_CLIENT`) at call time
 - activity_log source attribution: `cron` (sync pipeline, passed explicitly), `hermes`/`claude` (via PLANSYNC_CLIENT env on the MCP server), `human` (reserved)
 - activity_log.batch_id groups all log entries produced by one operation (completion + cascaded steps + dependency fires) into one reversible unit for undo (Step 45). log_change takes optional batch_id; standalone entries stay NULL
+- Status changes route through engine.transition(conn, entity_type, entity_id, event, context) -- validates against ACTIVITY_TRANSITIONS/STEP_TRANSITIONS tables, raises ValueError on invalid moves, returns side-effect events for engine.react(conn, events, batch_id). No raw `UPDATE ... SET status=` in cascade paths (v1 call sites migrate in Steps 36-37). trigger_fire resolves preparing-vs-active by whether prep steps exist; revert takes context['to_status']
 
 ## Do not
 - Do not use class components or ORM -- raw SQL via sqlite3, schemas in schema.sql

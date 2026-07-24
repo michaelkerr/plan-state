@@ -1,6 +1,6 @@
 # Garden -- plan state
 
-Generated 2026-07-24T06:00:06 by export_dossier.py from the live plansync DB.
+Generated 2026-07-24T17:00:25 by export_dossier.py from the live plansync DB.
 Do not hand-edit: this file is regenerated daily by the 6 AM sync. For live
 queries or changes, use the plansync MCP tools.
 

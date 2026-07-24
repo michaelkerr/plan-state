@@ -42,7 +42,18 @@ Test: Migration applies cleanly. log_change with batch_id stores it. log_change 
 Builds on: v1 complete
 
 ### Step 35: Transition function and reactor in engine.py
-Status: not started
+Status: complete
+Notes: Tables in engine.py: ACTIVITY_TRANSITIONS / STEP_TRANSITIONS with a
+CONTEXT_TARGET sentinel for revert (target from context['to_status']) and a
+callable resolver for trigger_fire (preparing if prep steps exist, else
+active -- daily_sync's rule, now universal; v1's _complete_activity set fired
+dependents to 'preparing' unconditionally). Valid no-op transitions (defer
+while watching) apply and log nothing. transition() logs via context
+batch_id/source/action/extra; react() handles activity_completed (prep
+pending+due -> completed, follow_ups -> due at today+lead, dependency fires
+at today+offset with cascade). cascade_step_dates gained batch_id
+passthrough. engine.new_batch_id() added. Nothing calls this yet -- Step 36
+wires it. Tests in tests/test_transition.py (33).
 What it does: Defines two state machines (activity and step) as transition tables in engine.py. Adds a transition(conn, entity_type, entity_id, event, context=None) function that validates the transition, applies the status change, and returns a list of side-effect events. Adds a react(conn, events, batch_id) function that processes side effects: auto-completing prep steps on activity completion (pending AND due), promoting follow-up steps, firing dependency triggers, logging all changes with the shared batch_id. Invalid transitions raise ValueError with the current state and attempted event.
 What good looks like: transition(conn, "activity", aid, "complete") updates the activity to completed, returns events for step cascade and dependency fire. react() processes those events, each producing further transitions if needed. No raw UPDATE ... SET status= anywhere in the cascade path.
 Test: Unit tests on transition(): valid transitions succeed, invalid transitions raise. Unit tests on react(): activity completion cascades prep steps (both pending and due), promotes follow-ups with correct dates, fires dependencies with offset_days. Cascade creates log entries sharing a batch_id.
