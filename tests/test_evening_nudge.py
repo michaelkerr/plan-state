@@ -65,10 +65,15 @@ def test_future_step_not_listed(conn):
     assert evening_nudge.build_nudge(conn, TODAY) is None
 
 
-def test_step_under_completed_activity_not_listed(conn):
+def test_step_under_completed_activity_is_listed(conn):
+    # v2 (Step 40): step visibility is the step's own state -- a follow-up
+    # promoted to 'due' when its activity completed still nudges until done.
+    # (v1 hid these; that was the headline visibility bug.)
     add_activity(conn, "a1", "Transplant Tomatoes", "completed", "2026-07-10")
-    add_step(conn, "s1", "a1", "Water in transplants", "pending", "2026-07-11")
-    assert evening_nudge.build_nudge(conn, TODAY) is None
+    add_step(conn, "s1", "a1", "Water in transplants", "due", "2026-07-11")
+    msg = evening_nudge.build_nudge(conn, TODAY)
+    assert msg is not None
+    assert "Water in transplants" in msg
 
 
 def test_completed_step_not_listed(conn):

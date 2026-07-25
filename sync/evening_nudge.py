@@ -22,39 +22,21 @@ def _label(domain, group, name):
 
 def build_nudge(conn, today):
     """Message text listing open items dated today or earlier, or None if all
-    clear. Open = fired activities (preparing/active) plus their pending/due
-    steps; watching activities haven't fired, so there is nothing to do yet."""
+    clear. Steps come from the shared view: visibility is the step's own
+    state, so a follow-up on a completed activity still nudges. Activities
+    are the fired ones (preparing/active); watching haven't fired, so there
+    is nothing to do yet."""
     items = []
 
-    steps = conn.execute(
-        """SELECT s.name AS step_name, s.due_date,
-                  a.name AS activity_name, a.group_name, d.name AS domain_name
-           FROM steps s
-           JOIN activities a ON s.activity_id = a.id
-           JOIN domains d ON a.domain_id = d.id
-           WHERE s.status IN ('pending','due')
-             AND s.due_date IS NOT NULL AND s.due_date <= ?
-             AND a.status IN ('preparing','active')
-           ORDER BY s.due_date, d.name""",
-        (today,),
-    ).fetchall()
-    for s in steps:
+    for s in engine.get_actionable_items(conn, as_of_date=today):
         name = f'{s["activity_name"]}: {s["step_name"]}'
         line = _label(s["domain_name"], s["group_name"], name)
         when = "due today" if s["due_date"] == today else f"due {s['due_date']}"
         items.append(f"- {line} ({when})")
 
-    activities = conn.execute(
-        """SELECT a.name, a.group_name, a.trigger_date, d.name AS domain_name
-           FROM activities a
-           JOIN domains d ON a.domain_id = d.id
-           WHERE a.status IN ('preparing','active')
-             AND a.trigger_date IS NOT NULL AND a.trigger_date <= ?
-           ORDER BY a.trigger_date, d.name""",
-        (today,),
-    ).fetchall()
-    for a in activities:
-        line = _label(a["domain_name"], a["group_name"], a["name"])
+    for a in engine.get_open_activities(conn, through_date=today,
+                                        statuses=("preparing", "active")):
+        line = _label(a["domain_name"], a["group_name"], a["activity_name"])
         when = "due today" if a["trigger_date"] == today else f"open since {a['trigger_date']}"
         items.append(f"- {line} ({when})")
 

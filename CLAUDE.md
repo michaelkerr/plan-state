@@ -41,13 +41,14 @@ plan-state/
 │   ├── server.py               # MCP server over stdio JSON-RPC
 │   └── requirements.txt        # mcp>=1.0.0
 ├── sync/
-│   ├── daily_sync.py           # Deterministic sync pipeline (weather, conditions, triggers, cascade, overdue)
+│   ├── daily_sync.py           # Deterministic sync pipeline (weather, conditions, triggers, cascade, overdue); hourly
 │   ├── evening_nudge.py        # Evening "still open today" reminder (silent when clear)
+│   ├── briefing_context.py     # Morning briefing context (sync output, 24h fires, due/week via views)
 │   ├── export_dossier.py       # Per-domain markdown state files → domains/{slug}/dossier.md (generated)
 │   └── requirements.txt        # requests
 ├── scripts/                    # Cron wrappers (copied to Hermes data dir by register.sh) + one-time migrations
 │   ├── daily-sync.py           # Delegates to sync/daily_sync.py, then sync/export_dossier.py
-│   ├── briefing-context.py     # Reads sync output + DB for LLM briefing
+│   ├── briefing-context.py     # Delegates to sync/briefing_context.py
 │   ├── briefing-context.sh     # Shell wrapper for briefing-context.py
 │   ├── evening-nudge.py        # Delegates to sync/evening_nudge.py
 │   └── migrate-*.py            # One-time DB migrations (historical; already applied)
@@ -112,6 +113,6 @@ plan-state/
 - **v2: plan-management-first architecture (2026-07-24)** -- v1 was built trigger-first (trigger_def is the most complex structure, trigger evaluation the most complex code). v2 inverts this: the plan hierarchy (domain/activity/step) is the foundation with simple CRUD, triggers are optional enrichment, step visibility is independent of parent activity status, and all state changes route through explicit transition tables with a cascade reactor. Rationale and full design in plansync-redesign.md (project doc). v1 build history archived to docs/archive/BUILD_PLAN_V1.md
 
 ## Inconsistencies
-- **Step visibility depends on parent activity status** -- the actionable_items/open_steps views (Step 39) define visibility from the step's own state, but evening_nudge, briefing-context, and get_upcoming still filter steps by a.status IN (...) with their own SQL. Follow-up steps on completed activities stay invisible in those surfaces until Steps 40-41 migrate them onto the views.
-- **Four independent "what's open" query definitions** -- daily_sync, evening_nudge, briefing-context, and get_upcoming each compose their own SQL with different filters and date comparisons. Tracked until Phase 2 consolidates them.
+- **Step visibility depends on parent activity status (get_upcoming only)** -- evening_nudge and briefing_context read the actionable_items/open_steps/open_activities views (Steps 39-40): visibility is the step's own state. get_upcoming still filters by a.status with its own SQL until Step 41.
+- **Independent "what's open" query definitions (2 left)** -- get_upcoming (Step 41) and daily_sync's check_overdue query still compose their own SQL. evening_nudge and briefing_context now share the view layer.
 - **complete_activity ignores steps with status='due'** -- line 672 in server.py only auto-completes prep steps with status='pending'. Steps promoted to 'due' by the overdue checker are orphaned on activity completion. Tracked until Phase 1 (Step 36) migrates to transition().

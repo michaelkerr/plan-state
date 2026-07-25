@@ -27,20 +27,22 @@ def main():
     # The view DDL lives in schema.sql (single source of truth) -- extract it
     with open(SCHEMA_PATH) as f:
         schema = f.read()
-    views = re.findall(r"CREATE VIEW IF NOT EXISTS \w+ AS.*?;", schema, re.DOTALL)
-    if len(views) != 2:
-        print(f"error: expected 2 view definitions in schema.sql, found {len(views)}", file=sys.stderr)
+    views = re.findall(r"CREATE VIEW IF NOT EXISTS (\w+) AS.*?;", schema, re.DOTALL)
+    ddls = re.findall(r"CREATE VIEW IF NOT EXISTS \w+ AS.*?;", schema, re.DOTALL)
+    expected = {"open_steps", "actionable_items", "open_activities"}
+    if not expected <= set(views):
+        print(f"error: schema.sql views {views} missing some of {sorted(expected)}", file=sys.stderr)
         return 1
 
     conn = sqlite3.connect(DB_PATH)
     try:
-        conn.execute("DROP VIEW IF EXISTS actionable_items")
-        conn.execute("DROP VIEW IF EXISTS open_steps")
-        for ddl in views:
+        for name in views:
+            conn.execute(f"DROP VIEW IF EXISTS {name}")
+        for ddl in ddls:
             conn.execute(ddl)
         conn.commit()
         n = conn.execute("SELECT COUNT(*) FROM actionable_items").fetchone()[0]
-        print(f"created views open_steps, actionable_items ({n} items actionable now)")
+        print(f"created views {', '.join(views)} ({n} items actionable now)")
         return 0
     finally:
         conn.close()

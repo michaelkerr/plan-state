@@ -229,7 +229,7 @@ class TestObservationsSurface:
         env["PLANSYNC_DB"] = db_path
         env["PLANSYNC_OUTPUT_DIR"] = str(tmp_path / "sync-output")
         out = subprocess.run(
-            [sys.executable, os.path.join(ROOT, "scripts", "briefing-context.py")],
+            [sys.executable, os.path.join(ROOT, "sync", "briefing_context.py")],
             capture_output=True, text=True, env=env,
         )
         assert out.returncode == 0, out.stderr
@@ -245,7 +245,7 @@ class TestObservationsSurface:
         env["PLANSYNC_DB"] = db_path
         env["PLANSYNC_OUTPUT_DIR"] = str(tmp_path / "sync-output")
         out = subprocess.run(
-            [sys.executable, os.path.join(ROOT, "scripts", "briefing-context.py")],
+            [sys.executable, os.path.join(ROOT, "sync", "briefing_context.py")],
             capture_output=True, text=True, env=env,
         )
         assert "Ancient note" not in out.stdout

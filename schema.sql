@@ -113,3 +113,21 @@ CREATE VIEW IF NOT EXISTS open_steps AS
 CREATE VIEW IF NOT EXISTS actionable_items AS
   SELECT * FROM open_steps
   WHERE due_date <= date('now','localtime');
+
+-- Open activities (not yet completed/skipped) with their domain context.
+-- Consumers narrow by status: the nudge shows only fired ones
+-- (preparing/active), the briefing lookahead includes watching.
+CREATE VIEW IF NOT EXISTS open_activities AS
+  SELECT a.id            AS activity_id,
+         a.name          AS activity_name,
+         a.status        AS activity_status,
+         a.group_name    AS group_name,
+         a.trigger_date  AS trigger_date,
+         a.trigger_type  AS trigger_type,
+         d.id            AS domain_id,
+         d.name          AS domain_name,
+         d.location      AS location
+  FROM activities a
+  JOIN domains d ON a.domain_id = d.id
+  WHERE a.status IN ('watching','preparing','active')
+    AND a.trigger_date IS NOT NULL;

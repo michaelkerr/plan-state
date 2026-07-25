@@ -155,7 +155,7 @@ class TestMigration:
         conn = sqlite3.connect(path)
         views = {r[0] for r in conn.execute(
             "SELECT name FROM sqlite_master WHERE type='view'")}
-        assert {"actionable_items", "open_steps"} <= views
+        assert {"actionable_items", "open_steps", "open_activities"} <= views
         conn.close()
 
     def test_migration_idempotent(self, tmp_path):

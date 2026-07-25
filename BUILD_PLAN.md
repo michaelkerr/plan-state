@@ -143,7 +143,20 @@ Test: Seed a DB with activities in various statuses (watching, preparing, active
 Builds on: v1 complete (independent of Phase 1, but Phase 1 makes step visibility correct)
 
 ### Step 40: Migrate evening_nudge and briefing-context to the view
-Status: not started
+Status: complete
+Notes: Added a third view open_activities (open statuses + trigger_date) so
+the nudge's fired-activities list and the briefing's This-Week lookahead also
+come from schema-defined SQL; engine.get_open_activities(through_date,
+statuses, domain_id) wraps it. briefing-context restructured to the wrapper
+pattern: scripts/briefing-context.py is now a thin delegate to canonical
+sync/briefing_context.py (volume-mounted, live-editable, uses engine.get_db)
+-- no more re-copying logic into the container on every edit. Output keys/
+ordering preserved for the briefing skill. Deliberate visibility change:
+steps on completed/watching parents now appear in nudge + briefing
+(test_step_under_completed_activity_not_listed inverted to ..._is_listed).
+Deployed: view migration re-run, wrapper re-copied, both surfaces smoke-
+tested in-container (nudge went 21 -> 26 items, surfacing the orphans).
+Tests in tests/test_view_consumers.py (5).
 What it does: Rewrites evening_nudge.py's build_nudge() and briefing-context.py's "Due Today or Overdue" query to use the actionable_items view (or engine.get_actionable_items). briefing-context.py switches to engine.get_db() instead of its own connection. The "This Week" lookahead query in briefing-context also moves to a shared function or a parameterized view query. Both scripts produce identical output to before (same format, same ordering) but from the shared definition.
 What good looks like: evening_nudge and briefing-context contain zero inline SQL for "what's due." Output format is unchanged. briefing-context imports from engine.
 Test: Regression: evening_nudge output matches old output for same DB state. briefing-context output matches old output. briefing-context uses engine.get_db() (no local sqlite3.connect).

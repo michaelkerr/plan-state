@@ -374,3 +374,27 @@ def get_actionable_items(conn, as_of_date=None, domain_id=None):
         sql += " WHERE " + " AND ".join(clauses)
     sql += " ORDER BY due_date, domain_name, activity_name, step_name"
     return [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+
+def get_open_activities(conn, through_date=None, statuses=None, domain_id=None):
+    """Open activities from the open_activities view.
+
+    statuses narrows within the view's open set (e.g. the nudge wants only
+    fired activities: ('preparing','active')); through_date bounds
+    trigger_date; ordering is trigger_date-first (callers re-sort for other
+    presentations)."""
+    sql = "SELECT * FROM open_activities"
+    clauses, params = [], []
+    if statuses:
+        clauses.append(f"activity_status IN ({','.join('?' * len(statuses))})")
+        params.extend(statuses)
+    if through_date is not None:
+        clauses.append("trigger_date <= ?")
+        params.append(through_date)
+    if domain_id is not None:
+        clauses.append("domain_id = ?")
+        params.append(domain_id)
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
+    sql += " ORDER BY trigger_date, domain_name, activity_name"
+    return [dict(r) for r in conn.execute(sql, params).fetchall()]

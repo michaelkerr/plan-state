@@ -189,7 +189,7 @@ class TestBriefingContext:
         env["PLANSYNC_DB"] = db_path
         env["PLANSYNC_OUTPUT_DIR"] = str(tmp_path / "sync-output")
         result = subprocess.run(
-            [sys.executable, os.path.join(ROOT, "scripts", "briefing-context.py")],
+            [sys.executable, os.path.join(ROOT, "sync", "briefing_context.py")],
             capture_output=True, text=True, env=env,
         )
         assert result.returncode == 0, result.stderr
