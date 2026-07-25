@@ -91,7 +91,8 @@ Test: Regression: existing sync tests pass. Trigger fire via transition() produc
 Builds on: Step 36
 
 ### Step 38: Kill plan-sync Telegram delivery
-Status: built (awaiting manual verification)
+Status: complete
+User verified 2026-07-25: no plan-sync Telegram messages, briefing intact.
 Notes: Live job e310e6b9a114 switched via `hermes cron edit --deliver local`
 on 2026-07-24; register.sh updated so fresh registrations use local delivery.
 Same day, schedule changed from daily 6:00 to hourly (0 * * * *) at user
@@ -124,7 +125,18 @@ Builds on: Step 38
 ### Phase 2: Shared view layer
 
 ### Step 39: Create actionable_items SQL view
-Status: not started
+Status: complete
+Notes: Two layers: open_steps (join + status filter, no date -- the base for
+Steps 40-41 lookahead windows, which a date-filtered view couldn't serve) and
+actionable_items (open_steps WHERE due_date <= date('now','localtime');
+'localtime' because plain date('now') is UTC and rolls to tomorrow at 7 PM
+local). engine.get_actionable_items(conn, as_of_date, domain_id) queries
+actionable_items by default, open_steps when widening. Migration
+(migrate-actionable-view.py) extracts view DDL from schema.sql (single
+source of truth) and drop/recreates -- also the upgrade path for future view
+changes. Applied to live DB 2026-07-25: 21 items, immediately surfacing 3
+orphaned prep steps on the completed Southern Peas activity (pre-Step-36
+casualties). Tests in tests/test_actionable_items.py (13).
 What it does: Adds a CREATE VIEW actionable_items to schema.sql and a migration to create it on the live DB. The view joins steps/activities/domains and filters to steps with status IN ('pending','due') and due_date <= date('now'). No filter on activity status -- step visibility is determined by the step's own state. Adds a companion function engine.get_actionable_items(conn, as_of_date=None, domain_id=None) that queries the view with optional filters.
 What good looks like: SELECT * FROM actionable_items returns all steps that need attention regardless of parent activity status. Follow-up steps on completed activities appear when their due_date arrives. The engine function provides a Python interface with filtering.
 Test: Seed a DB with activities in various statuses (watching, preparing, active, completed) with steps due today. View returns steps from all parent statuses. Follow-up step on a completed activity with due_date=today appears. Step with due_date=tomorrow does not appear. engine.get_actionable_items() matches raw view query.

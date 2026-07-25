@@ -83,3 +83,33 @@ CREATE INDEX IF NOT EXISTS idx_conditions_activity ON conditions(activity_id);
 CREATE INDEX IF NOT EXISTS idx_weather_location ON weather_log(location, recorded_at);
 CREATE INDEX IF NOT EXISTS idx_activity_log_item ON activity_log(item_type, item_id);
 CREATE INDEX IF NOT EXISTS idx_activity_log_batch ON activity_log(batch_id);
+
+-- Step visibility comes from the step's own state, never the parent
+-- activity's status (a follow-up on a completed activity is still work).
+-- open_steps is the dateless base (Steps 40-41 run lookahead windows over
+-- it); actionable_items narrows to due-now. 'localtime' matters: plain
+-- date('now') is UTC and rolls to tomorrow at 7 PM local.
+CREATE VIEW IF NOT EXISTS open_steps AS
+  SELECT s.id            AS step_id,
+         s.name          AS step_name,
+         s.step_type     AS step_type,
+         s.status        AS step_status,
+         s.due_date      AS due_date,
+         s.lead_days     AS lead_days,
+         a.id            AS activity_id,
+         a.name          AS activity_name,
+         a.status        AS activity_status,
+         a.group_name    AS group_name,
+         a.trigger_date  AS trigger_date,
+         d.id            AS domain_id,
+         d.name          AS domain_name,
+         d.location      AS location
+  FROM steps s
+  JOIN activities a ON s.activity_id = a.id
+  JOIN domains d ON a.domain_id = d.id
+  WHERE s.status IN ('pending','due')
+    AND s.due_date IS NOT NULL;
+
+CREATE VIEW IF NOT EXISTS actionable_items AS
+  SELECT * FROM open_steps
+  WHERE due_date <= date('now','localtime');

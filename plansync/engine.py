@@ -350,3 +350,27 @@ def react(conn, events, batch_id, source=None):
             cascade_step_dates(conn, dep["id"], new_trigger, source=source, batch_id=batch_id)
             result["dependencies_fired"].append({"id": dep["id"], "name": dep["name"], "trigger_date": new_trigger})
     return result
+
+
+# ── Shared view layer (Step 39) ──────────────────────────────
+
+def get_actionable_items(conn, as_of_date=None, domain_id=None):
+    """Steps needing attention, from the shared view definition.
+
+    Default: the actionable_items view (due today or overdue, visibility
+    from the step's own state regardless of parent activity status).
+    as_of_date widens the window over the open_steps base view (used for
+    lookahead); domain_id narrows to one domain."""
+    source = "actionable_items" if as_of_date is None else "open_steps"
+    sql = f"SELECT * FROM {source}"
+    clauses, params = [], []
+    if as_of_date is not None:
+        clauses.append("due_date <= ?")
+        params.append(as_of_date)
+    if domain_id is not None:
+        clauses.append("domain_id = ?")
+        params.append(domain_id)
+    if clauses:
+        sql += " WHERE " + " AND ".join(clauses)
+    sql += " ORDER BY due_date, domain_name, activity_name, step_name"
+    return [dict(r) for r in conn.execute(sql, params).fetchall()]
