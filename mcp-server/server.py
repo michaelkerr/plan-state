@@ -310,24 +310,32 @@ def _load_domain(conn, args) -> list[types.TextContent]:
 
 def _insert_activity(conn, domain_id, aid, act_def, name_to_id, default_sort):
     """Insert one activity with its steps and conditions. Raises ValueError on
-    unresolvable dependency refs; caller owns the transaction."""
-    trigger_def = _resolve_refs(act_def["trigger_def"], name_to_id)
-    if isinstance(trigger_def, dict) and trigger_def.get("_error"):
-        raise ValueError(trigger_def["_error"])
+    unresolvable dependency refs; caller owns the transaction.
 
-    trigger_def_str = json.dumps(trigger_def)
-    trigger_date = compute_trigger_date(trigger_def)
+    No trigger = decided work: starts 'active' with no trigger_date, no
+    conditions, NULL step due dates (set via update_step or when a
+    trigger_def is added later)."""
+    trigger_def = act_def.get("trigger_def")
+    if trigger_def is not None:
+        trigger_def = _resolve_refs(trigger_def, name_to_id)
+        if isinstance(trigger_def, dict) and trigger_def.get("_error"):
+            raise ValueError(trigger_def["_error"])
+
+    trigger_def_str = json.dumps(trigger_def) if trigger_def is not None else None
+    trigger_date = compute_trigger_date(trigger_def) if trigger_def is not None else None
+    status = "watching" if trigger_def is not None else "active"
 
     conn.execute(
-        """INSERT INTO activities (id, domain_id, name, description, group_name, trigger_type, trigger_def, trigger_date, sort_order)
-           VALUES (?,?,?,?,?,?,?,?,?)""",
+        """INSERT INTO activities (id, domain_id, name, description, group_name, status, trigger_type, trigger_def, trigger_date, sort_order)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
         (
             aid, domain_id, act_def["name"], act_def.get("description"), act_def.get("group_name"),
-            act_def["trigger_type"], trigger_def_str, trigger_date,
+            status, act_def.get("trigger_type"), trigger_def_str, trigger_date,
             act_def.get("sort_order", default_sort),
         ),
     )
-    log_change(conn, "activity", aid, "created", None, {"name": act_def["name"], "trigger_type": act_def["trigger_type"]})
+    log_change(conn, "activity", aid, "created", None,
+               {"name": act_def["name"], "trigger_type": act_def.get("trigger_type"), "status": status})
 
     created_steps = []
     for j, step_def in enumerate(act_def.get("steps", [])):
@@ -343,7 +351,7 @@ def _insert_activity(conn, domain_id, aid, act_def, name_to_id, default_sort):
         )
         created_steps.append({"id": sid, "name": step_def["name"], "due_date": due})
 
-    for cond_def in derive_conditions(trigger_def):
+    for cond_def in derive_conditions(trigger_def) if trigger_def is not None else []:
         cid = new_id()
         conn.execute(
             "INSERT INTO conditions (id, activity_id, condition_type, definition) VALUES (?,?,?,?)",
@@ -354,9 +362,9 @@ def _insert_activity(conn, domain_id, aid, act_def, name_to_id, default_sort):
         "id": aid,
         "name": act_def["name"],
         "group_name": act_def.get("group_name"),
-        "trigger_type": act_def["trigger_type"],
+        "trigger_type": act_def.get("trigger_type"),
         "trigger_date": trigger_date,
-        "status": "watching",
+        "status": status,
         "steps": created_steps,
     }
 
@@ -445,12 +453,16 @@ def _validate_activities(activities, errors, existing_names=frozenset()):
             errors.append({"path": f"{prefix}.name", "error": f"Duplicate activity name: {act['name']}"})
         else:
             batch_names.add(act["name"])
-        if "trigger_type" not in act:
-            errors.append({"path": f"{prefix}.trigger_type", "error": "Required field missing"})
-        elif act["trigger_type"] not in valid_trigger_types:
+        # Triggers are optional (Step 42): an activity without one is decided
+        # work and starts 'active'. But trigger_type and trigger_def come as a
+        # pair -- one without the other is an authoring mistake.
+        has_type, has_def = "trigger_type" in act, "trigger_def" in act
+        if has_type and act["trigger_type"] not in valid_trigger_types:
             errors.append({"path": f"{prefix}.trigger_type", "error": f"Invalid trigger type: {act['trigger_type']}"})
-        if "trigger_def" not in act:
-            errors.append({"path": f"{prefix}.trigger_def", "error": "Required field missing"})
+        if has_type and not has_def:
+            errors.append({"path": f"{prefix}.trigger_def", "error": "trigger_type given without trigger_def; provide both or neither (no trigger = immediately active work)"})
+        if has_def and not has_type:
+            errors.append({"path": f"{prefix}.trigger_type", "error": "trigger_def given without trigger_type; provide both or neither (no trigger = immediately active work)"})
         for j, step in enumerate(act.get("steps", [])):
             sp = f"{prefix}.steps[{j}]"
             if "condition" in step:
@@ -567,6 +579,10 @@ def _update_activity(conn, args) -> list[types.TextContent]:
                 "INSERT INTO conditions (id, activity_id, condition_type, definition) VALUES (?,?,?,?)",
                 (new_id(), aid, cond_def["condition_type"], json.dumps(cond_def["definition"])),
             )
+        # Decided work gaining a trigger goes back under condition watching
+        if current.get("trigger_def") is None and current.get("status") == "active" \
+                and "status" not in changes:
+            transition(conn, "activity", aid, "watch")
 
     if "trigger_date" in args and args["trigger_date"] != current.get("trigger_date"):
         cascade_step_dates(conn, aid, args["trigger_date"])

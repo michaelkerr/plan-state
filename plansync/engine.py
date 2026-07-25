@@ -196,6 +196,7 @@ ACTIVITY_TRANSITIONS = {
     ("active", "complete"): "completed",
     ("active", "defer"): "watching",
     ("active", "skip"): "skipped",
+    ("active", "watch"): "watching",  # no-trigger work gains a trigger_def (Step 42)
     ("completed", "revert"): CONTEXT_TARGET,
     ("skipped", "revert"): CONTEXT_TARGET,
 }

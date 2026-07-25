@@ -182,7 +182,15 @@ Builds on: Step 39
 ### Phase 3: Plan management
 
 ### Step 42: Make trigger_type and trigger_def optional
-Status: not started
+Status: complete
+Notes: trigger_type/trigger_def optional as a PAIR (one without the other is
+an authoring-mistake error). No-trigger insert: status 'active', NULL
+trigger fields, no conditions, NULL step due dates. update_activity adding a
+trigger_def to a triggerless 'active' activity fires the new ('active',
+'watch') transition -> 'watching' (skipped when the caller also sets status
+explicitly); changing an existing trigger never resets status. Authoring
+skill: don't invent calendar triggers for whenever-work. Tests in
+tests/test_optional_trigger.py (12).
 What it does: Relaxes validation in _validate_activities to allow activities without trigger_type or trigger_def. An activity created without a trigger starts in 'active' status (it's decided work, not condition-gated). _insert_activity handles the no-trigger case: no conditions derived, no trigger_date computed, status defaults to 'active'. update_activity can add a trigger_def later, which changes status to 'watching' and derives conditions. Domain authoring skill updated to note that simple date-based items can be added without trigger machinery.
 What good looks like: add_activities(domain_id, [{"name": "Mulch garlic bed"}]) creates an active activity with no trigger. Adding trigger_def later via update_activity transitions it to 'watching' and derives conditions. Existing trigger-required activities work unchanged.
 Test: Add activity without trigger -- status 'active', no conditions, no trigger_date. Add trigger_def via update_activity -- status 'watching', conditions derived, trigger_date computed. Existing validation still catches invalid trigger_types and trigger_defs.
