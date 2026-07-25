@@ -231,6 +231,34 @@ def new_batch_id():
     return uuid.uuid4().hex[:12]
 
 
+def slugify(name):
+    """Stable ref_name from a display name: lowercase, alnum runs joined by
+    single hyphens. 'Cut Potato Tops (S1 & N1)!' -> 'cut-potato-tops-s1-n1'."""
+    parts = []
+    current = []
+    for ch in name.lower():
+        if ch.isalnum():
+            current.append(ch)
+        elif current:
+            parts.append("".join(current))
+            current = []
+    if current:
+        parts.append("".join(current))
+    return "-".join(parts)
+
+
+def unique_ref_name(conn, domain_id, base):
+    """base, or base-2, base-3... -- first ref_name free in the domain."""
+    taken = {r["ref_name"] for r in conn.execute(
+        "SELECT ref_name FROM activities WHERE domain_id=?", (domain_id,)).fetchall()}
+    if base not in taken:
+        return base
+    n = 2
+    while f"{base}-{n}" in taken:
+        n += 1
+    return f"{base}-{n}"
+
+
 def _utcnow_iso():
     # Naive UTC ISO string, matching the format of existing completed_at rows
     return datetime.now(timezone.utc).replace(tzinfo=None).isoformat()

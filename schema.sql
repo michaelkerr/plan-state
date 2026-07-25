@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS activities (
   id              TEXT PRIMARY KEY,
   domain_id       TEXT NOT NULL REFERENCES domains(id),
   name            TEXT NOT NULL,
+  ref_name        TEXT,
   description     TEXT,
   group_name      TEXT,
   status          TEXT DEFAULT 'watching'
@@ -77,6 +78,7 @@ CREATE TABLE IF NOT EXISTS activity_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_activities_domain ON activities(domain_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_activities_ref ON activities(domain_id, ref_name);
 CREATE INDEX IF NOT EXISTS idx_activities_status ON activities(status);
 CREATE INDEX IF NOT EXISTS idx_steps_activity ON steps(activity_id);
 CREATE INDEX IF NOT EXISTS idx_conditions_activity ON conditions(activity_id);

@@ -246,7 +246,13 @@ Builds on: Steps 34-37 (batch_id + transition function with 'revert' event)
 ### Phase 4: Declarative plan sync
 
 ### Step 46: Stable identity for activities (ref_name)
-Status: not started
+Status: complete
+Notes: engine.slugify + engine.unique_ref_name (auto slugs uniquify with
+-2/-3 suffixes against the domain; explicit ref_names rejected on collision
+by the unique index, atomically rolling back the batch). update_activity
+rejects ref_name with an explanatory error (immutable). Migration backfilled
+92 live rows 2026-07-25, zero duplicates. Tests in tests/test_ref_name.py
+(11).
 What it does: Adds a ref_name TEXT column to activities. Set at creation time (defaults to a slugified version of name if not provided). Immutable after creation -- renaming an activity (update_activity name=) does not change ref_name. Used by load_domain sync mode (Step 47) to match declared activities to existing DB rows across renames. Unique within a domain.
 What good looks like: Activity created as "Sow Broccoli Indoors" gets ref_name "sow-broccoli-indoors". Renamed to "Sow Cabbage Indoors" -- ref_name unchanged. load_domain can match by ref_name to update the existing row instead of creating a duplicate.
 Test: Create activity -- ref_name auto-generated. Rename -- ref_name unchanged. Duplicate ref_name in same domain -- rejected. Explicit ref_name at creation -- used as-is.

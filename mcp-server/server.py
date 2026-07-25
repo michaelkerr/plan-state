@@ -26,8 +26,10 @@ from plansync.engine import (  # noqa: E402
     new_batch_id,
     react,
     row_to_dict,
+    slugify,
     step_due_date,
     transition,
+    unique_ref_name,
 )
 
 server = Server("plansync")
@@ -369,18 +371,22 @@ def _insert_activity(conn, domain_id, aid, act_def, name_to_id, default_sort):
     trigger_def_str = json.dumps(trigger_def) if trigger_def is not None else None
     trigger_date = compute_trigger_date(trigger_def) if trigger_def is not None else None
     status = "watching" if trigger_def is not None else "active"
+    # Stable identity: explicit ref_name is used as-is (unique index rejects
+    # duplicates); auto-generated slugs uniquify against the domain
+    ref_name = act_def.get("ref_name") or unique_ref_name(conn, domain_id, slugify(act_def["name"]))
 
     conn.execute(
-        """INSERT INTO activities (id, domain_id, name, description, group_name, status, trigger_type, trigger_def, trigger_date, sort_order)
-           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        """INSERT INTO activities (id, domain_id, name, ref_name, description, group_name, status, trigger_type, trigger_def, trigger_date, sort_order)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
         (
-            aid, domain_id, act_def["name"], act_def.get("description"), act_def.get("group_name"),
+            aid, domain_id, act_def["name"], ref_name, act_def.get("description"), act_def.get("group_name"),
             status, act_def.get("trigger_type"), trigger_def_str, trigger_date,
             act_def.get("sort_order", default_sort),
         ),
     )
     log_change(conn, "activity", aid, "created", None,
-               {"name": act_def["name"], "trigger_type": act_def.get("trigger_type"), "status": status})
+               {"name": act_def["name"], "ref_name": ref_name,
+                "trigger_type": act_def.get("trigger_type"), "status": status})
 
     created_steps = []
     for j, step_def in enumerate(act_def.get("steps", [])):
@@ -406,6 +412,7 @@ def _insert_activity(conn, domain_id, aid, act_def, name_to_id, default_sort):
     return {
         "id": aid,
         "name": act_def["name"],
+        "ref_name": ref_name,
         "group_name": act_def.get("group_name"),
         "trigger_type": act_def.get("trigger_type"),
         "trigger_date": trigger_date,
@@ -597,6 +604,10 @@ def _update_activity(conn, args) -> list[types.TextContent]:
     if not current:
         return ok({"error": f"Activity {aid} not found"})
     current = row_to_dict(current)
+
+    if "ref_name" in args:
+        return ok({"error": "ref_name is immutable: it is the stable identity used to match "
+                            "declared activities to DB rows across renames. Rename via 'name'."})
 
     updatable = ["name", "description", "group_name", "status", "trigger_type", "trigger_def", "trigger_date"]
     sets, vals, changes = [], [], {}
