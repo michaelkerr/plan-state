@@ -276,7 +276,9 @@ def evaluate_triggers(conn, summary):
             )
             engine.transition(conn, "activity", act["id"], "trigger_fire",
                               {"source": "cron", "batch_id": batch,
-                               "action": "trigger_fire", "extra": {"reason": reason}})
+                               "action": "trigger_fire",
+                               "extra": {"reason": reason, "trigger_date": trigger_date},
+                               "old_extra": {"trigger_date": act["trigger_date"]}})
 
             if trigger_date:
                 _cascade_steps(conn, act["id"], trigger_date, summary, batch_id=batch)

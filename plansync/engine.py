@@ -197,6 +197,10 @@ ACTIVITY_TRANSITIONS = {
     ("active", "defer"): "watching",
     ("active", "skip"): "skipped",
     ("active", "watch"): "watching",  # no-trigger work gains a trigger_def (Step 42)
+    # revert is undo's event: any state back to the logged prior state
+    ("watching", "revert"): CONTEXT_TARGET,
+    ("preparing", "revert"): CONTEXT_TARGET,
+    ("active", "revert"): CONTEXT_TARGET,
     ("completed", "revert"): CONTEXT_TARGET,
     ("skipped", "revert"): CONTEXT_TARGET,
 }
@@ -207,9 +211,11 @@ STEP_TRANSITIONS = {
     ("pending", "promote"): "due",
     ("pending", "overdue"): "due",
     ("pending", "skip"): "skipped",
+    ("pending", "revert"): CONTEXT_TARGET,
     ("due", "complete"): "completed",
     ("due", "parent_complete"): "completed",
     ("due", "skip"): "skipped",
+    ("due", "revert"): CONTEXT_TARGET,
     ("completed", "uncomplete"): "pending",
     ("completed", "revert"): CONTEXT_TARGET,
     ("skipped", "revert"): CONTEXT_TARGET,
@@ -282,10 +288,12 @@ def transition(conn, entity_type, entity_id, event, context=None):
         vals.append(entity_id)
         conn.execute(f"UPDATE {table} SET {', '.join(sets)} WHERE id=?", vals)
 
+        old_value = {"status": current}
+        old_value.update(context.get("old_extra") or {})
         new_value = {"status": target}
         new_value.update(context.get("extra") or {})
         log_change(conn, entity_type, entity_id, context.get("action", "status_change"),
-                   {"status": current}, new_value,
+                   old_value, new_value,
                    source=context.get("source"), batch_id=context.get("batch_id"))
 
     events = []
@@ -335,7 +343,7 @@ def react(conn, events, batch_id, source=None):
             result["steps_completed"].append({"id": s["id"], "name": s["name"], "was": s["status"]})
 
         follow_ups = conn.execute(
-            "SELECT id, name, lead_days FROM steps "
+            "SELECT id, name, lead_days, due_date FROM steps "
             "WHERE activity_id=? AND step_type='follow_up' AND status='pending'",
             (aid,),
         ).fetchall()
@@ -343,11 +351,12 @@ def react(conn, events, batch_id, source=None):
             due = (date.today() + timedelta(days=fu["lead_days"])).isoformat()
             conn.execute("UPDATE steps SET due_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (due, fu["id"]))
             queue.extend(transition(conn, "step", fu["id"], "promote",
-                                    dict(ctx, extra={"due_date": due})))
+                                    dict(ctx, extra={"due_date": due},
+                                         old_extra={"due_date": fu["due_date"]})))
             result["follow_ups_promoted"].append({"id": fu["id"], "name": fu["name"], "due_date": due})
 
         dependents = conn.execute(
-            "SELECT id, name, trigger_def FROM activities "
+            "SELECT id, name, trigger_def, trigger_date FROM activities "
             "WHERE trigger_type='dependency' AND status='watching'",
         ).fetchall()
         for dep in dependents:
@@ -361,7 +370,8 @@ def react(conn, events, batch_id, source=None):
             )
             queue.extend(transition(conn, "activity", dep["id"], "trigger_fire",
                                     dict(ctx, action="trigger_fire",
-                                         extra={"trigger_date": new_trigger, "fired_by": aid})))
+                                         extra={"trigger_date": new_trigger, "fired_by": aid},
+                                         old_extra={"trigger_date": dep["trigger_date"]})))
             cascade_step_dates(conn, dep["id"], new_trigger, source=source, batch_id=batch_id)
             result["dependencies_fired"].append({"id": dep["id"], "name": dep["name"], "trigger_date": new_trigger})
     return result

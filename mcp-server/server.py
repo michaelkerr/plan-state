@@ -168,6 +168,18 @@ async def list_tools() -> list[types.Tool]:
             },
         ),
         types.Tool(
+            name="undo",
+            description="Revert the most recent batched operation (completion cascade, deferral, soft delete, trigger fire, step status change) -- or, with item_type/item_id, the most recent batch touching that item. Restores statuses and logged field values. Undoing an undo is not supported.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "item_type": {"type": "string", "enum": ["activity", "step"]},
+                    "item_id": {"type": "string"},
+                },
+                "required": [],
+            },
+        ),
+        types.Tool(
             name="add_step",
             description="Add a step to an existing activity. Due date derives from the parent's trigger_date (prep = before, follow_up = after); NULL when the parent has no trigger_date (set it later via update_step or by adding a trigger to the parent).",
             inputSchema={
@@ -245,6 +257,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             return _delete_activity(conn, arguments)
         elif name == "add_step":
             return _add_step(conn, arguments)
+        elif name == "undo":
+            return _undo(conn, arguments)
         else:
             return ok({"error": f"Unknown tool: {name}"})
     finally:
@@ -876,6 +890,105 @@ def _delete_activity(conn, args) -> list[types.TextContent]:
         "batch_id": batch,
         "activity_status": "skipped",
         "steps_skipped": result["steps_skipped"],
+    })
+
+
+# Fields undo may restore from logged old_values, per entity type. Everything
+# else in an old_value (reason, notes, fired_by) is annotation, not state.
+UNDO_RESTORABLE_FIELDS = {
+    "activity": {"name", "description", "group_name", "trigger_date", "trigger_def", "trigger_type"},
+    "step": {"name", "description", "lead_days", "step_type", "due_date"},
+}
+
+
+def _restore_fields(conn, item_type, item_id, old_value):
+    table = "activities" if item_type == "activity" else "steps"
+    allowed = UNDO_RESTORABLE_FIELDS[item_type]
+    sets, vals = [], []
+    for k, v in old_value.items():
+        if k == "status" or k not in allowed:
+            continue
+        if k == "trigger_def" and isinstance(v, (dict, list)):
+            v = json.dumps(v)
+        sets.append(f"{k}=?")
+        vals.append(v)
+    if sets:
+        sets.append("updated_at=CURRENT_TIMESTAMP")
+        vals.append(item_id)
+        conn.execute(f"UPDATE {table} SET {', '.join(sets)} WHERE id=?", vals)
+    return [k for k in old_value if k != "status" and k in allowed]
+
+
+def _undo(conn, args) -> list[types.TextContent]:
+    item_type, item_id = args.get("item_type"), args.get("item_id")
+    # Skip undo batches themselves (their summary entry has action='undo'):
+    # reverting a reversal is undoing an undo, which is not supported
+    q = ("SELECT batch_id FROM activity_log l WHERE batch_id IS NOT NULL "
+         "AND NOT EXISTS (SELECT 1 FROM activity_log u "
+         "WHERE u.batch_id = l.batch_id AND u.action='undo')")
+    params = []
+    if item_type:
+        q += " AND item_type=?"
+        params.append(item_type)
+    if item_id:
+        q += " AND item_id=?"
+        params.append(item_id)
+    q += " ORDER BY id DESC LIMIT 1"
+    row = conn.execute(q, params).fetchone()
+    if not row:
+        return ok({"error": "Nothing to undo (no batched operations found)"})
+    batch = row["batch_id"]
+
+    if conn.execute(
+        "SELECT 1 FROM activity_log WHERE action='undo' AND json_extract(new_value, '$.undo_of')=?",
+        (batch,),
+    ).fetchone():
+        return ok({"error": f"Batch {batch} was already undone; undoing an undo is not supported"})
+
+    entries = [row_to_dict(e) for e in conn.execute(
+        "SELECT * FROM activity_log WHERE batch_id=? ORDER BY id DESC", (batch,)).fetchall()]
+
+    undo_batch = new_batch_id()
+    reverted, skipped = [], []
+    try:
+        # Reverse order: later side effects revert before the root action
+        for e in entries:
+            old = e["old_value"] or {}
+            if e["item_type"] not in ("activity", "step"):
+                skipped.append({"item_id": e["item_id"], "action": e["action"],
+                                "reason": f"cannot revert {e['item_type']} entries"})
+                continue
+            if e["action"] in ("status_change", "trigger_fire"):
+                transition(conn, e["item_type"], e["item_id"], "revert",
+                           {"to_status": old.get("status"), "batch_id": undo_batch})
+                restored = _restore_fields(conn, e["item_type"], e["item_id"], old)
+                if e["action"] == "trigger_fire":
+                    # a reverted fire is un-fired; the cron may fire it again
+                    conn.execute("UPDATE activities SET trigger_fired=NULL WHERE id=?", (e["item_id"],))
+                reverted.append({"item_type": e["item_type"], "item_id": e["item_id"],
+                                 "status": old.get("status"), "fields": restored})
+            elif e["action"] in ("date_cascade", "manual_update"):
+                restored = _restore_fields(conn, e["item_type"], e["item_id"], old)
+                reverted.append({"item_type": e["item_type"], "item_id": e["item_id"],
+                                 "fields": restored})
+            else:  # created / observation have no prior state to restore
+                skipped.append({"item_id": e["item_id"], "action": e["action"],
+                                "reason": f"'{e['action']}' entries are not reverted"})
+    except ValueError as err:
+        conn.rollback()
+        return ok({"error": f"Undo failed, nothing changed: {err}"})
+
+    # Root entry (earliest in the batch) anchors the undo record
+    root = entries[-1]
+    log_change(conn, root["item_type"], root["item_id"], "undo", None,
+               {"undo_of": batch, "reverted": len(reverted), "skipped": len(skipped)},
+               batch_id=undo_batch)
+    conn.commit()
+    return ok({
+        "undo_of": batch,
+        "undo_batch_id": undo_batch,
+        "reverted": reverted,
+        "skipped": skipped,
     })
 
 

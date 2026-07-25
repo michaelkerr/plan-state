@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS activity_log (
   timestamp       DATETIME DEFAULT CURRENT_TIMESTAMP,
   item_type       TEXT NOT NULL CHECK(item_type IN ('domain','activity','step','condition')),
   item_id         TEXT NOT NULL,
-  action          TEXT NOT NULL CHECK(action IN ('status_change','date_cascade','trigger_fire','manual_update','created','observation')),
+  action          TEXT NOT NULL CHECK(action IN ('status_change','date_cascade','trigger_fire','manual_update','created','observation','undo')),
   old_value       JSON,
   new_value       JSON,
   source          TEXT NOT NULL CHECK(source IN ('cron','hermes','claude','human')),

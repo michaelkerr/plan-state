@@ -224,7 +224,20 @@ Test: Add step with trigger parent -- correct due date. Add step to no-trigger p
 Builds on: v1 complete
 
 ### Step 45: Undo tool
-Status: not started
+Status: complete
+Notes: revert is now legal from every state (CONTEXT_TARGET rows added for
+watching/preparing/active + pending/due). transition() gained old_extra so
+fires and promotions log their prior trigger_date/due_date -- undo restores
+them (trigger_fired cleared on un-fire, so the cron may legitimately re-fire
+next run). Undo an undo: refused -- the finder skips any batch containing an
+action='undo' entry and the already-undone check keys off new_value.undo_of.
+Reversals log as normal status_change entries under a fresh undo batch; one
+'undo' summary entry anchors on the batch's root item. created/observation
+entries are skipped (no prior state), reported in the response. Field
+restore is allowlisted per entity (UNDO_RESTORABLE_FIELDS). Migration
+migrate-undo-action.py (table rebuild for the action CHECK) applied live
+2026-07-25, 211 entries preserved. Tool count 14. Tests in
+tests/test_undo.py (12).
 What it does: New MCP tool undo(item_type=None, item_id=None). Without args: finds the most recent batch_id in activity_log and reverts all entries in that batch. With args: finds the most recent batch for that item. Revert = restore old_value for each log entry in the batch, in reverse order. Uses transition() for status reversals (the transition table defines (completed, revert) -> [prior state]). Logs the undo itself as an 'undo' action. Returns what was reverted.
 What good looks like: Complete an activity (cascades to 5 steps + 1 dependency). Call undo(). Activity returns to prior status, 5 steps return to prior status, dependency returns to 'watching'. All reversals logged.
 Test: Complete an activity with cascades. Undo. Verify all entities returned to prior state. Undo a step completion. Undo a deferral. Undo with no prior actions -- returns empty. Undo an undo -- not allowed (or returns to the post-action state; decide during build).
