@@ -316,7 +316,7 @@ class TestReact:
     def test_react_empty_events_is_noop(self, db):
         result = react(db, [], new_batch_id())
         assert result == {"steps_completed": [], "follow_ups_promoted": [],
-                          "dependencies_fired": []}
+                          "dependencies_fired": [], "steps_skipped": []}
 
     def test_no_raw_status_updates_needed(self, db):
         """The reactor path produces valid states end-to-end -- every touched

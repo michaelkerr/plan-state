@@ -291,6 +291,8 @@ def transition(conn, entity_type, entity_id, event, context=None):
     events = []
     if entity_type == "activity" and event == "complete":
         events.append({"type": "activity_completed", "activity_id": entity_id})
+    elif entity_type == "activity" and event == "skip":
+        events.append({"type": "activity_skipped", "activity_id": entity_id})
     return events
 
 
@@ -301,12 +303,24 @@ def react(conn, events, batch_id, source=None):
     activity_completed: prep steps (pending and due) complete, follow-up
     steps promote to 'due' at today + lead_days, watching dependency
     activities fire at today + offset_days with their step dates cascaded.
+    activity_skipped: open steps (pending and due) skip with it.
     """
-    result = {"steps_completed": [], "follow_ups_promoted": [], "dependencies_fired": []}
+    result = {"steps_completed": [], "follow_ups_promoted": [], "dependencies_fired": [],
+              "steps_skipped": []}
     ctx = {"batch_id": batch_id, "source": source}
     queue = list(events)
     while queue:
         ev = queue.pop(0)
+        if ev["type"] == "activity_skipped":
+            open_steps = conn.execute(
+                "SELECT id, name, status FROM steps "
+                "WHERE activity_id=? AND status IN ('pending','due')",
+                (ev["activity_id"],),
+            ).fetchall()
+            for s in open_steps:
+                queue.extend(transition(conn, "step", s["id"], "skip", dict(ctx)))
+                result["steps_skipped"].append({"id": s["id"], "name": s["name"], "was": s["status"]})
+            continue
         if ev["type"] != "activity_completed":
             continue
         aid = ev["activity_id"]

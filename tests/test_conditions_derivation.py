@@ -206,11 +206,12 @@ class TestEndToEndFiring:
 
 
 class TestToolSurface:
-    def test_server_lists_eleven_tools(self):
+    def test_server_lists_twelve_tools(self):
+        # 11 v1 tools + delete_activity (Step 43)
         import server
         tools = asyncio.run(server.list_tools())
         names = {t.name for t in tools}
-        assert len(names) == 11
+        assert len(names) == 12
         assert "create_domain" not in names
         assert "create_activity" not in names
         assert {"load_domain", "add_activities", "update_activity", "update_step", "complete_activity"} <= names

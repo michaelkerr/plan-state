@@ -156,6 +156,18 @@ async def list_tools() -> list[types.Tool]:
             },
         ),
         types.Tool(
+            name="delete_activity",
+            description="Remove an activity. Default is a soft delete: activity and its open steps move to 'skipped' (reversible, disappears from actionable views). permanent=true deletes the activity, its steps, conditions, and log entries with no trace -- use only when the user explicitly wants it gone for good.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "activity_id": {"type": "string"},
+                    "permanent": {"type": "boolean", "default": False},
+                },
+                "required": ["activity_id"],
+            },
+        ),
+        types.Tool(
             name="update_step",
             description="Update fields on an existing step. Changing status to 'completed' sets completed_at; changing lead_days or step_type re-derives due_date from the parent activity's trigger_date.",
             inputSchema={
@@ -214,6 +226,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             return _load_domain(conn, arguments)
         elif name == "add_activities":
             return _add_activities(conn, arguments)
+        elif name == "delete_activity":
+            return _delete_activity(conn, arguments)
         else:
             return ok({"error": f"Unknown tool: {name}"})
     finally:
@@ -767,6 +781,53 @@ def _defer_activity(conn, args) -> list[types.TextContent]:
         for s in conn.execute("SELECT * FROM steps WHERE activity_id=? ORDER BY sort_order, due_date", (aid,)).fetchall()
     ]
     return ok(updated)
+
+
+def _delete_activity(conn, args) -> list[types.TextContent]:
+    aid = args["activity_id"]
+    current = conn.execute("SELECT * FROM activities WHERE id=?", (aid,)).fetchone()
+    if not current:
+        return ok({"error": f"Activity {aid} not found"})
+
+    if args.get("permanent"):
+        step_ids = [r["id"] for r in conn.execute(
+            "SELECT id FROM steps WHERE activity_id=?", (aid,)).fetchall()]
+        cond_count = conn.execute(
+            "SELECT COUNT(*) AS c FROM conditions WHERE activity_id=?", (aid,)).fetchone()["c"]
+        log_ids = [aid] + step_ids
+        log_count = conn.execute(
+            f"SELECT COUNT(*) AS c FROM activity_log WHERE item_id IN ({','.join('?' * len(log_ids))})",
+            log_ids).fetchone()["c"]
+        conn.execute("DELETE FROM conditions WHERE activity_id=?", (aid,))
+        conn.execute("DELETE FROM steps WHERE activity_id=?", (aid,))
+        conn.execute(
+            f"DELETE FROM activity_log WHERE item_id IN ({','.join('?' * len(log_ids))})", log_ids)
+        conn.execute("DELETE FROM activities WHERE id=?", (aid,))
+        conn.commit()
+        return ok({
+            "deleted": aid,
+            "name": current["name"],
+            "mode": "permanent",
+            "steps_deleted": len(step_ids),
+            "conditions_deleted": cond_count,
+            "log_entries_deleted": log_count,
+        })
+
+    batch = new_batch_id()
+    try:
+        events = transition(conn, "activity", aid, "skip", {"batch_id": batch})
+    except ValueError as e:
+        return ok({"error": str(e)})
+    result = react(conn, events, batch)
+    conn.commit()
+    return ok({
+        "deleted": aid,
+        "name": current["name"],
+        "mode": "soft",
+        "batch_id": batch,
+        "activity_status": "skipped",
+        "steps_skipped": result["steps_skipped"],
+    })
 
 
 def _add_observation(conn, args) -> list[types.TextContent]:

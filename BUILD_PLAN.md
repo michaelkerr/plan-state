@@ -197,7 +197,15 @@ Test: Add activity without trigger -- status 'active', no conditions, no trigger
 Builds on: Steps 35-37 (transition function defines what 'active' means)
 
 ### Step 43: Add delete_activity tool
-Status: not started
+Status: complete
+Notes: Soft delete rides the state machine: transition(skip) now emits an
+activity_skipped event and react() skips the open steps (pending+due) under
+the same batch -- undo (Step 45) gets soft-deletes for free. Soft delete of
+a completed/skipped activity is rejected (revert first, or use permanent).
+Permanent path deletes conditions/steps/log entries/activity in FK order and
+reports counts; per spec it leaves no trace (no tombstone log entry). Tool
+count is now 12 (test_conditions_derivation updated). Tests in
+tests/test_delete_activity.py (9).
 What it does: New MCP tool delete_activity(activity_id, permanent=False). Default (soft delete): sets activity status to 'skipped' via transition(), skips all child steps, logs to activity_log. With permanent=True: deletes the activity, its steps, its conditions, and related log entries. Returns what was affected.
 What good looks like: Soft-delete an activity -- status 'skipped', all steps 'skipped', disappears from actionable_items view. Undo (Step 45) can revert a soft-delete. Permanent delete removes all traces.
 Test: Soft-delete: activity and steps move to 'skipped'. Actionable items view excludes them. Permanent delete: rows gone from all tables.
