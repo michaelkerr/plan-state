@@ -8,7 +8,9 @@ overdue, this week's activities and steps (next 7 days), and current weather.
 
 Keep it short and actionable. Structure as:
 
-1. **What happened overnight** — triggers fired, dates that moved, items completed
+1. **What happened since yesterday** — use the "Fired Since Yesterday (last
+   24h)" section for triggers fired (the sync runs hourly; fires can happen
+   any time of day), plus dates that moved and items completed
 2. **Today's priorities** — ONLY steps from the "Due Today or Overdue" section.
    Never promote future items into this section, even if they seem urgent — an
    item due next week belongs in This week.

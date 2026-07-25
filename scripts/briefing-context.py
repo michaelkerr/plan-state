@@ -30,6 +30,24 @@ if os.path.exists(sync_file):
 else:
     print("No sync output for today.")
 
+# The sync JSON above resets at midnight, so a trigger that fired midday
+# yesterday would vanish from it by this morning. activity_log is the source
+# of truth for the "what happened" narrative -- pull the last 24h directly.
+print("\n=== Fired Since Yesterday (last 24h) ===")
+fires = query_db(
+    """SELECT l.timestamp,
+              a.name as activity, a.group_name, d.name as domain,
+              json_extract(l.new_value, '$.status') as new_status,
+              json_extract(l.new_value, '$.reason') as reason
+       FROM activity_log l
+       JOIN activities a ON a.id = l.item_id
+       JOIN domains d ON a.domain_id = d.id
+       WHERE l.action = 'trigger_fire'
+         AND l.timestamp >= datetime('now', '-1 day')
+       ORDER BY l.timestamp""",
+)
+print(json.dumps(fires, indent=2, default=str))
+
 print("\n=== Due Today or Overdue ===")
 steps = query_db(
     """SELECT s.name as step, s.due_date, s.status,

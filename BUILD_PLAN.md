@@ -107,6 +107,20 @@ What good looks like: No 6:00 AM Telegram message. Briefing and nudge unaffected
 Test: Manual -- verify no Telegram message at 6:00, verify briefing at 6:15 still has full content.
 Builds on: v1 complete (independent of Steps 34-37)
 
+### Step 38a: Hourly-sync event accumulation + 24h briefing lookback
+Status: complete
+Notes: save_output load-merge-saves the daily JSON (event lists append with
+per-entry "time", overdue snapshot replaced, runs/last_run added; corrupt
+prior file starts fresh). briefing-context queries activity_log trigger_fire
+over 24h -- deployed by re-copying the script into the container (it holds
+real logic, unlike the thin wrappers; Step 40 will move it onto engine).
+Briefing skill section 1 now points at the new context section. Verified
+in-container. Tests in tests/test_sync_accumulation.py (6).
+What it does: Follow-up to the hourly sync change (2026-07-25). (1) save_output merges into the daily JSON instead of overwriting: event lists (triggers_fired, dates_cascaded, errors) accumulate across runs with per-entry timestamps, state snapshots (overdue) reflect the latest run, plus runs count and last_run. (2) briefing-context.py adds a "Fired Since Yesterday (last 24h)" section querying activity_log trigger_fire entries -- the DB is the source of truth for the briefing narrative, so midday fires survive the date boundary. (3) plansync-briefing.md points "What happened overnight" at the new section.
+What good looks like: A trigger firing at 2 PM appears in that day's JSON (with a time), and in the next morning's 6:15 briefing narrative.
+Test: save_output called twice accumulates event lists, replaces overdue, counts runs. briefing-context output includes a trigger_fire logged 2h ago and excludes one from 3 days ago.
+Builds on: Step 38
+
 ### Phase 2: Shared view layer
 
 ### Step 39: Create actionable_items SQL view

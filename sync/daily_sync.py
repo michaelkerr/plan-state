@@ -281,7 +281,8 @@ def evaluate_triggers(conn, summary):
             if trigger_date:
                 _cascade_steps(conn, act["id"], trigger_date, summary, batch_id=batch)
 
-            summary.triggers_fired.append({"name": act["name"], "reason": reason})
+            summary.triggers_fired.append({"name": act["name"], "reason": reason,
+                                           "time": NOW.isoformat()})
 
 
 def _check_trigger(conn, act, tdef):
@@ -349,7 +350,8 @@ def _cascade_steps(conn, activity_id, trigger_date_str, summary, batch_id=None):
     engine.cascade_step_dates(
         conn, activity_id, trigger_date_str, source="cron", batch_id=batch_id,
         on_change=lambda s, old_due, new_due: summary.dates_cascaded.append(
-            {"name": s["name"], "old_date": old_due, "new_date": new_due}),
+            {"name": s["name"], "old_date": old_due, "new_date": new_due,
+             "time": NOW.isoformat()}),
     )
 
 
@@ -463,8 +465,28 @@ def check_overdue(conn, summary):
 def save_output(summary):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     path = os.path.join(OUTPUT_DIR, f"{TODAY.isoformat()}.json")
+    out = summary.to_dict()
+
+    # Hourly runs share one daily file: event lists accumulate (each entry
+    # carries its run's time), state snapshots (overdue) reflect the latest
+    # run only
+    prior = None
+    if os.path.exists(path):
+        try:
+            with open(path) as f:
+                prior = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            prior = None
+    if prior:
+        for key in ("triggers_fired", "dates_cascaded", "errors"):
+            out[key] = prior.get(key, []) + out[key]
+        out["runs"] = prior.get("runs", 1) + 1
+    else:
+        out["runs"] = 1
+    out["last_run"] = NOW.isoformat()
+
     with open(path, "w") as f:
-        json.dump(summary.to_dict(), f, indent=2, default=str)
+        json.dump(out, f, indent=2, default=str)
 
 
 # ── Main ─────────────────────────────────────────────────────
