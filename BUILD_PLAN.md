@@ -259,7 +259,19 @@ Test: Create activity -- ref_name auto-generated. Rename -- ref_name unchanged. 
 Builds on: v1 complete
 
 ### Step 47: Upgrade load_domain to sync mode
-Status: not started
+Status: complete
+Notes: _sync_domain diffs then applies (dry_run returns the diff pre-apply).
+Match order: declared ref_name -> exact name -> auto-slug. Gotcha found in
+testing: dependency trigger_defs are stored ref-RESOLVED (activity_id) while
+declarations carry activity_ref names -- the diff resolves refs first (new
+activities get ids up front so refs to them resolve), and apply writes the
+resolved def. Omitted trigger fields leave the DB trigger alone
+(declarations may be partial); trigger changes re-derive conditions/
+trigger_date/cascade and fire (active, watch) when decided work gains a
+trigger. Steps match by name within parent; nothing is ever deleted --
+missing rows are flagged. One batch per apply (undoable). Old
+duplicate-domain-rejected test inverted to expect empty-diff sync. Tests in
+tests/test_load_domain_sync.py (11).
 What it does: When load_domain receives a definition for a domain that already exists, it diffs the declaration against current DB state instead of rejecting. Activities matched by ref_name (or name if ref_name absent). Diff: new activities created, changed activities updated, activities in DB but not in declaration flagged (not auto-deleted). Steps matched by name within parent. Returns a diff summary. With dry_run=True, returns the diff without applying. With dry_run=False (default when domain exists), applies and returns what changed.
 What good looks like: Edit a domain definition YAML, call load_domain. New activities appear, changed activities update, nothing is silently deleted. The diff summary shows exactly what would change before applying.
 Test: Load a domain. Modify the definition (add activity, rename activity, change trigger_def, remove activity). Re-load. Verify: new activity created, renamed activity updated (matched by ref_name), trigger_def change applied, removed activity flagged but not deleted. dry_run returns diff without changes.

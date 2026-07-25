@@ -93,6 +93,8 @@ Activity format (used by both `load_domain` and `add_activities`):
 
 Do NOT include a `conditions` array — the system derives condition rows automatically from the condition-type leaves of `trigger_def`, and definitions that include an explicit `conditions` field are rejected.
 
+Re-loading an existing domain (same `name`) is a SYNC, not an error: the definition is diffed against current state -- new activities created, changed ones updated (matched by `ref_name`, falling back to `name`), and anything in the DB but missing from the definition is flagged, never deleted. Renaming an activity in a definition requires carrying its `ref_name` so the match holds. Use `dry_run: true` to preview the diff first; omitting `trigger_type`/`trigger_def` in a synced activity leaves its existing trigger untouched.
+
 `trigger_type`/`trigger_def` are optional, as a pair. Omit both for decided work that needs no gating (e.g. "Mulch the garlic bed"): the activity starts `active` immediately, its steps have no due dates until you set them (or add a trigger later via `update_activity`). Don't invent a calendar trigger just to fill the field — if the user would do the work whenever they get to it, it has no trigger.
 
 Create mode wraps activities in a domain:

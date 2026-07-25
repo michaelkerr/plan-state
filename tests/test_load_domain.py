@@ -223,9 +223,12 @@ class TestLoadDomainInvalid:
         assert domains == 0
         assert activities == 0
 
-    def test_duplicate_domain_name_returns_error(self, db):
+    def test_duplicate_domain_name_syncs_instead_of_erroring(self, db):
+        # Step 47: re-loading an existing domain diffs instead of rejecting.
+        # An unchanged declaration is an empty diff.
         definition = load_example("lawn-care.json")
         call_load_domain(definition)
         result = call_load_domain(definition)
-        assert "error" in result
-        assert "already exists" in result["error"].lower()
+        assert "error" not in result
+        assert result["mode"] == "sync"
+        assert result["created"] == [] and result["updated"] == []

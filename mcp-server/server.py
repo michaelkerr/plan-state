@@ -214,13 +214,18 @@ async def list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="load_domain",
-            description="Bulk-load a complete domain definition (domain + all activities, steps, conditions) in one atomic operation. Validates the definition, resolves activity_ref dependencies by name, and rolls back on any error.",
+            description="Bulk-load a complete domain definition (domain + all activities, steps, conditions) in one atomic operation. Validates the definition, resolves activity_ref dependencies by name, and rolls back on any error. If the domain already exists, switches to sync mode: diffs the declaration against DB state (matched by ref_name, then name) -- new activities are created, changed ones updated, DB rows missing from the declaration are flagged but never deleted. dry_run=true returns the diff without applying.",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "definition": {
                         "type": "object",
                         "description": "Complete domain definition conforming to domain_schema.json",
+                    },
+                    "dry_run": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "Sync mode only: report the diff without applying it",
                     },
                 },
                 "required": ["definition"],
@@ -319,9 +324,14 @@ def _load_domain(conn, args) -> list[types.TextContent]:
         return ok({"error": "Validation failed", "details": errors})
 
     name = defn["name"]
-    existing = conn.execute("SELECT id FROM domains WHERE name=?", (name,)).fetchone()
+    existing = conn.execute("SELECT * FROM domains WHERE name=?", (name,)).fetchone()
     if existing:
-        return ok({"error": f"Domain '{name}' already exists (id: {existing['id']})"})
+        # Sync mode: diff the declaration against DB state (Step 47)
+        try:
+            return _sync_domain(conn, existing, defn, dry_run=bool(args.get("dry_run")))
+        except (ValueError, sqlite3.Error) as e:
+            conn.rollback()
+            return ok({"error": str(e)})
 
     try:
         did = new_id()
@@ -353,6 +363,187 @@ def _load_domain(conn, args) -> list[types.TextContent]:
     except (ValueError, sqlite3.Error) as e:
         conn.rollback()
         return ok({"error": str(e)})
+
+
+def _canonical_tdef(tdef):
+    if isinstance(tdef, str):
+        tdef = json.loads(tdef)
+    return json.dumps(tdef, sort_keys=True) if tdef is not None else None
+
+
+ACTIVITY_SYNC_FIELDS = ("name", "description", "group_name")
+STEP_SYNC_FIELDS = ("step_type", "lead_days", "description")
+
+
+def _sync_domain(conn, domain_row, defn, dry_run):
+    """Diff a declaration against an existing domain and (unless dry_run)
+    apply it. Activities match by declared ref_name, then exact name, then
+    auto-slug. Nothing is deleted: DB rows absent from the declaration are
+    flagged. Omitted trigger fields leave the DB trigger alone (declarations
+    may be partial); an explicit trigger_def change re-derives conditions,
+    trigger_date, and step dates."""
+    did = domain_row["id"]
+    db_acts = [row_to_dict(r) for r in conn.execute(
+        "SELECT * FROM activities WHERE domain_id=?", (did,)).fetchall()]
+    by_ref = {a["ref_name"]: a for a in db_acts}
+    by_name = {a["name"]: a for a in db_acts}
+
+    matched, to_create = [], []
+    for decl in defn["activities"]:
+        ref = decl.get("ref_name")
+        db_act = by_ref.get(ref) if ref else (by_name.get(decl["name"]) or by_ref.get(slugify(decl["name"])))
+        (matched if db_act is not None else to_create).append((db_act, decl))
+    to_create = [decl for _, decl in to_create]
+
+    matched_ids = {a["id"] for a, _ in matched}
+    flagged = [{"id": a["id"], "name": a["name"], "ref_name": a["ref_name"], "status": a["status"]}
+               for a in db_acts if a["id"] not in matched_ids]
+
+    # Dependency trigger_defs are stored ref-resolved (activity_id), while
+    # declarations carry activity_ref names -- resolve before comparing.
+    # New activities get their ids up front so refs to them resolve too.
+    name_to_id = {a["name"]: a["id"] for a in db_acts}
+    for decl in to_create:
+        name_to_id[decl["name"]] = new_id()
+
+    updates, step_creates, step_updates, step_flags = [], [], [], []
+    for db_act, decl in matched:
+        changes = {}
+        for f in ACTIVITY_SYNC_FIELDS:
+            if f in decl and decl[f] != db_act.get(f):
+                changes[f] = {"old": db_act.get(f), "new": decl[f]}
+        decl_tdef = decl.get("trigger_def")
+        if decl_tdef is not None:
+            decl_tdef = _resolve_refs(decl_tdef, name_to_id)
+            if isinstance(decl_tdef, dict) and decl_tdef.get("_error"):
+                raise ValueError(decl_tdef["_error"])
+        if "trigger_def" in decl and _canonical_tdef(decl_tdef) != _canonical_tdef(db_act.get("trigger_def")):
+            changes["trigger_def"] = {"old": db_act.get("trigger_def"), "new": decl_tdef}
+            if decl.get("trigger_type") != db_act.get("trigger_type"):
+                changes["trigger_type"] = {"old": db_act.get("trigger_type"), "new": decl.get("trigger_type")}
+        if changes:
+            updates.append({"id": db_act["id"], "ref_name": db_act["ref_name"], "changes": changes})
+
+        db_steps = {s["name"]: row_to_dict(s) for s in conn.execute(
+            "SELECT * FROM steps WHERE activity_id=?", (db_act["id"],)).fetchall()}
+        decl_steps = decl.get("steps", [])
+        for sd in decl_steps:
+            db_step = db_steps.get(sd["name"])
+            if db_step is None:
+                step_creates.append({"activity_id": db_act["id"], "activity_ref": db_act["ref_name"],
+                                     "name": sd["name"], "decl": sd})
+                continue
+            s_changes = {f: {"old": db_step.get(f), "new": sd[f]}
+                         for f in STEP_SYNC_FIELDS if f in sd and sd[f] != db_step.get(f)}
+            if s_changes:
+                step_updates.append({"id": db_step["id"], "activity_id": db_act["id"],
+                                     "name": sd["name"], "changes": s_changes})
+        decl_step_names = {sd["name"] for sd in decl_steps}
+        for s_name, db_step in db_steps.items():
+            if s_name not in decl_step_names:
+                step_flags.append({"id": db_step["id"], "name": s_name,
+                                   "activity_ref": db_act["ref_name"], "status": db_step["status"]})
+
+    result = {
+        "mode": "sync",
+        "domain_id": did,
+        "dry_run": dry_run,
+        "applied": False,
+        "created": [{"name": d["name"]} for d in to_create],
+        "updated": updates,
+        "flagged_missing": flagged,
+        "steps_created": [{"activity_ref": sc["activity_ref"], "name": sc["name"]} for sc in step_creates],
+        "steps_updated": [{"name": su["name"], "changes": su["changes"]} for su in step_updates],
+        "steps_flagged": step_flags,
+    }
+    if dry_run:
+        return ok(result)
+
+    batch = new_batch_id()
+    created_results = []
+    max_sort = max((a.get("sort_order") or 0 for a in db_acts), default=0)
+    for i, decl in enumerate(to_create):
+        created_results.append(_insert_activity(conn, did, name_to_id[decl["name"]], decl,
+                                                name_to_id, default_sort=max_sort + i + 1))
+
+    for upd in updates:
+        aid = upd["id"]
+        db_act = next(a for a in db_acts if a["id"] == aid)
+        changes = upd["changes"]
+        sets, vals = [], []
+        for f, ch in changes.items():
+            if f == "trigger_def":
+                vals.append(json.dumps(ch["new"]))
+            else:
+                vals.append(ch["new"])
+            sets.append(f"{f}=?")
+        sets.append("updated_at=CURRENT_TIMESTAMP")
+        vals.append(aid)
+        conn.execute(f"UPDATE activities SET {', '.join(sets)} WHERE id=?", vals)
+        log_change(conn, "activity", aid, "manual_update",
+                   {f: ch["old"] for f, ch in changes.items()},
+                   {f: ch["new"] for f, ch in changes.items()},
+                   batch_id=batch)
+        if "trigger_def" in changes:
+            new_tdef = changes["trigger_def"]["new"]
+            conn.execute("DELETE FROM conditions WHERE activity_id=?", (aid,))
+            for cond_def in derive_conditions(new_tdef):
+                conn.execute(
+                    "INSERT INTO conditions (id, activity_id, condition_type, definition) VALUES (?,?,?,?)",
+                    (new_id(), aid, cond_def["condition_type"], json.dumps(cond_def["definition"])),
+                )
+            new_td = compute_trigger_date(new_tdef)
+            if new_td != db_act.get("trigger_date"):
+                conn.execute("UPDATE activities SET trigger_date=? WHERE id=?", (new_td, aid))
+                cascade_step_dates(conn, aid, new_td, batch_id=batch)
+            if db_act.get("trigger_def") is None and db_act.get("status") == "active":
+                transition(conn, "activity", aid, "watch", {"batch_id": batch})
+
+    for sc in step_creates:
+        parent = conn.execute("SELECT trigger_date FROM activities WHERE id=?",
+                              (sc["activity_id"],)).fetchone()
+        sd = sc["decl"]
+        due = step_due_date(parent["trigger_date"], sd["step_type"], sd["lead_days"])
+        max_step_sort = conn.execute(
+            "SELECT COALESCE(MAX(sort_order), -1) AS m FROM steps WHERE activity_id=?",
+            (sc["activity_id"],)).fetchone()["m"]
+        sid = new_id()
+        conn.execute(
+            """INSERT INTO steps (id, activity_id, name, description, step_type, lead_days, due_date, sort_order)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (sid, sc["activity_id"], sd["name"], sd.get("description"),
+             sd["step_type"], sd["lead_days"], due, max_step_sort + 1),
+        )
+        log_change(conn, "step", sid, "created", None,
+                   {"name": sd["name"], "activity_id": sc["activity_id"], "due_date": due},
+                   batch_id=batch)
+
+    for su in step_updates:
+        changes = su["changes"]
+        sets = [f"{f}=?" for f in changes]
+        vals = [ch["new"] for ch in changes.values()]
+        if "lead_days" in changes or "step_type" in changes:
+            parent = conn.execute(
+                "SELECT trigger_date FROM activities WHERE id=?", (su["activity_id"],)).fetchone()
+            if parent["trigger_date"]:
+                current_step = conn.execute("SELECT * FROM steps WHERE id=?", (su["id"],)).fetchone()
+                new_type = changes.get("step_type", {}).get("new", current_step["step_type"])
+                new_lead = changes.get("lead_days", {}).get("new", current_step["lead_days"])
+                sets.append("due_date=?")
+                vals.append(step_due_date(parent["trigger_date"], new_type, new_lead))
+        sets.append("updated_at=CURRENT_TIMESTAMP")
+        vals.append(su["id"])
+        conn.execute(f"UPDATE steps SET {', '.join(sets)} WHERE id=?", vals)
+        log_change(conn, "step", su["id"], "manual_update",
+                   {f: ch["old"] for f, ch in changes.items()},
+                   {f: ch["new"] for f, ch in changes.items()},
+                   batch_id=batch)
+
+    conn.commit()
+    result["applied"] = True
+    result["batch_id"] = batch
+    result["created"] = created_results
+    return ok(result)
 
 
 def _insert_activity(conn, domain_id, aid, act_def, name_to_id, default_sort):
