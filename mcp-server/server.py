@@ -168,6 +168,21 @@ async def list_tools() -> list[types.Tool]:
             },
         ),
         types.Tool(
+            name="add_step",
+            description="Add a step to an existing activity. Due date derives from the parent's trigger_date (prep = before, follow_up = after); NULL when the parent has no trigger_date (set it later via update_step or by adding a trigger to the parent).",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "activity_id": {"type": "string"},
+                    "name": {"type": "string"},
+                    "step_type": {"type": "string", "enum": ["prep", "follow_up"]},
+                    "lead_days": {"type": "integer", "minimum": 0},
+                    "description": {"type": "string"},
+                },
+                "required": ["activity_id", "name", "step_type", "lead_days"],
+            },
+        ),
+        types.Tool(
             name="update_step",
             description="Update fields on an existing step. Changing status to 'completed' sets completed_at; changing lead_days or step_type re-derives due_date from the parent activity's trigger_date.",
             inputSchema={
@@ -228,6 +243,8 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
             return _add_activities(conn, arguments)
         elif name == "delete_activity":
             return _delete_activity(conn, arguments)
+        elif name == "add_step":
+            return _add_step(conn, arguments)
         else:
             return ok({"error": f"Unknown tool: {name}"})
     finally:
@@ -620,6 +637,38 @@ def _update_activity(conn, args) -> list[types.TextContent]:
         for s in conn.execute("SELECT * FROM steps WHERE activity_id=? ORDER BY sort_order, due_date", (aid,)).fetchall()
     ]
     return ok(updated)
+
+
+def _add_step(conn, args) -> list[types.TextContent]:
+    aid = args["activity_id"]
+    activity = conn.execute("SELECT * FROM activities WHERE id=?", (aid,)).fetchone()
+    if not activity:
+        return ok({"error": f"Activity {aid} not found"})
+    if args.get("step_type") not in ("prep", "follow_up"):
+        return ok({"error": f"Invalid step_type: {args.get('step_type')!r} (expected 'prep' or 'follow_up')"})
+    lead_days = args.get("lead_days")
+    if not isinstance(lead_days, int) or lead_days < 0:
+        return ok({"error": "lead_days must be a non-negative integer"})
+
+    sid = new_id()
+    due = step_due_date(activity["trigger_date"], args["step_type"], lead_days)
+    max_sort = conn.execute(
+        "SELECT COALESCE(MAX(sort_order), -1) AS m FROM steps WHERE activity_id=?", (aid,)
+    ).fetchone()["m"]
+    conn.execute(
+        """INSERT INTO steps (id, activity_id, name, description, step_type, lead_days, due_date, sort_order)
+           VALUES (?,?,?,?,?,?,?,?)""",
+        (sid, aid, args["name"], args.get("description"),
+         args["step_type"], lead_days, due, max_sort + 1),
+    )
+    log_change(conn, "step", sid, "created", None,
+               {"name": args["name"], "step_type": args["step_type"],
+                "lead_days": lead_days, "due_date": due, "activity_id": aid})
+    conn.commit()
+
+    step = row_to_dict(conn.execute("SELECT * FROM steps WHERE id=?", (sid,)).fetchone())
+    step["activity_name"] = activity["name"]
+    return ok(step)
 
 
 def _step_status_event(current, desired):

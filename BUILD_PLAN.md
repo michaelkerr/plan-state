@@ -212,7 +212,12 @@ Test: Soft-delete: activity and steps move to 'skipped'. Actionable items view e
 Builds on: Steps 35-37
 
 ### Step 44: Add add_step tool
-Status: not started
+Status: complete
+Notes: Straightforward: due via engine.step_due_date (NULL for no-trigger
+parents), appended sort_order, 'created' log entry, response includes
+activity_name. Parent trigger_date changes reach the new step through the
+existing cascade (test-verified). Tool count now 13. Tests in
+tests/test_add_step.py (10).
 What it does: New MCP tool add_step(activity_id, name, step_type, lead_days, description=None). Creates a step on an existing activity. Due date derived from parent's trigger_date via engine.step_due_date(). If the parent has no trigger_date, due_date is NULL (set manually via update_step or when a trigger_def is added to the parent). Logged to activity_log.
 What good looks like: Add a prep step to an existing activity -- due date correctly computed as trigger_date - lead_days. Add a follow-up step -- due date is trigger_date + lead_days. Add a step to a no-trigger activity -- due_date NULL.
 Test: Add step with trigger parent -- correct due date. Add step to no-trigger parent -- NULL due date. Parent trigger_date change cascades to the new step.
