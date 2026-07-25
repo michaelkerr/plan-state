@@ -1,6 +1,6 @@
 # Garden -- plan state
 
-Generated 2026-07-25T11:00:48 by export_dossier.py from the live plansync DB.
+Generated 2026-07-25T11:27:26 by export_dossier.py from the live plansync DB.
 Do not hand-edit: this file is regenerated daily by the 6 AM sync. For live
 queries or changes, use the plansync MCP tools.
 
@@ -95,11 +95,11 @@ queries or changes, use the plansync MCP tools.
 - 2026-07-21: Cowpea inoculant (Bradyrhizobium, cowpea/peanut group) ordered and received. Pinkeye Purple Hull pea seed (bush type) ordered.
 
 ## Conditions watch
-- Move Olive Indoors for Winter: daily_low <= 35 -- not met, currently 74.25
-- Move Olive Back Outside: daily_low >= 40 x3d -- MET, currently 74.25
+- Move Olive Indoors for Winter: daily_low <= 35 -- not met, currently 74.37
+- Move Olive Back Outside: daily_low >= 40 x3d -- MET, currently 74.37
 
 ## Recent weather (last 7 days)
-- 2026-07-25: high 88.09, low 74.25, Rain, precip 0.005511800000000001"
+- 2026-07-25: high 86.34, low 74.37, Clouds
 - 2026-07-24: high 70.97, low 70.97, Clouds
 - 2026-07-23: high 82.18, low 74.62, Clouds
 - 2026-07-22: high 88.99, low 73.02, Clouds

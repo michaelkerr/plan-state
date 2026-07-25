@@ -99,14 +99,24 @@ def derive_daily_range(current_temp, forecast_data, now_utc):
     return max(temps), min(temps)
 
 
-def pull_weather(conn, summary):
-    if not OWM_KEY:
-        summary.errors.append("OPENWEATHERMAP_API_KEY not set, skipping weather pull")
-        return
-    if requests is None:
-        summary.errors.append("requests not installed, skipping weather pull")
-        return
+def pull_weather(conn, summary=None):
+    """Stage 1: refresh today's weather row per location.
 
+    Returns {"pulled": [{location, temp_high, temp_low}], "errors": [...]}.
+    Skippable: later stages read weather_log, not this result."""
+    result = {"pulled": [], "errors": []}
+    if not OWM_KEY:
+        result["errors"].append("OPENWEATHERMAP_API_KEY not set, skipping weather pull")
+    elif requests is None:
+        result["errors"].append("requests not installed, skipping weather pull")
+    else:
+        _pull_weather_locations(conn, result)
+    if summary is not None:
+        summary.errors.extend(result["errors"])
+    return result
+
+
+def _pull_weather_locations(conn, result):
     locations = conn.execute("SELECT DISTINCT location FROM domains WHERE location IS NOT NULL").fetchall()
     for row in locations:
         loc = row["location"]
@@ -134,8 +144,9 @@ def pull_weather(conn, summary):
             precip_inches = rain * 0.03937
 
             upsert_weather_row(conn, loc, temp_high, temp_low, weather_desc, precip_inches, json.dumps(fdata))
+            result["pulled"].append({"location": loc, "temp_high": temp_high, "temp_low": temp_low})
         except Exception as e:
-            summary.errors.append(f"Weather pull failed for {loc}: {e}")
+            result["errors"].append(f"Weather pull failed for {loc}: {e}")
 
 
 def upsert_weather_row(conn, loc, temp_high, temp_low, conditions, precipitation, forecast_json):
@@ -156,7 +167,12 @@ def upsert_weather_row(conn, loc, temp_high, temp_low, conditions, precipitation
 
 # ── Step 2: Condition Evaluation ─────────────────────────────
 
-def evaluate_conditions(conn, summary):
+def evaluate_conditions(conn, summary=None):
+    """Stage 2: refresh the conditions evaluation cache from weather_log.
+
+    Returns {"evaluated": n, "met": m}. Reads weather already in the DB --
+    pull_weather need not have run this process."""
+    result = {"evaluated": 0, "met": 0}
     conditions = conn.execute(
         "SELECT c.*, a.domain_id FROM conditions c JOIN activities a ON c.activity_id = a.id WHERE a.status = 'watching'"
     ).fetchall()
@@ -186,6 +202,11 @@ def evaluate_conditions(conn, summary):
             "UPDATE conditions SET current_value=?, is_met=?, last_checked=? WHERE id=?",
             (current_value, is_met, NOW.isoformat(), cond["id"]),
         )
+        result["evaluated"] += 1
+        if is_met:
+            result["met"] += 1
+
+    return result
 
 
 def _eval_temperature(conn, location, cdef):
@@ -254,7 +275,11 @@ def _eval_dependency(conn, cdef):
 
 # ── Step 3: Trigger Evaluation ───────────────────────────────
 
-def evaluate_triggers(conn, summary):
+def evaluate_triggers(conn, summary=None):
+    """Stage 3: fire watching triggers via the state machine.
+
+    Returns {"fired": [{name, reason, time}], "dates_cascaded": [...]}."""
+    result = {"fired": [], "dates_cascaded": []}
     watching = conn.execute(
         "SELECT * FROM activities WHERE status = 'watching'"
     ).fetchall()
@@ -281,10 +306,15 @@ def evaluate_triggers(conn, summary):
                                "old_extra": {"trigger_date": act["trigger_date"]}})
 
             if trigger_date:
-                _cascade_steps(conn, act["id"], trigger_date, summary, batch_id=batch)
+                _cascade_steps(conn, act["id"], trigger_date, result["dates_cascaded"], batch_id=batch)
 
-            summary.triggers_fired.append({"name": act["name"], "reason": reason,
-                                           "time": NOW.isoformat()})
+            result["fired"].append({"name": act["name"], "reason": reason,
+                                    "time": NOW.isoformat()})
+
+    if summary is not None:
+        summary.triggers_fired.extend(result["fired"])
+        summary.dates_cascaded.extend(result["dates_cascaded"])
+    return result
 
 
 def _check_trigger(conn, act, tdef):
@@ -348,10 +378,10 @@ def _check_trigger(conn, act, tdef):
     return False, ""
 
 
-def _cascade_steps(conn, activity_id, trigger_date_str, summary, batch_id=None):
+def _cascade_steps(conn, activity_id, trigger_date_str, collector, batch_id=None):
     engine.cascade_step_dates(
         conn, activity_id, trigger_date_str, source="cron", batch_id=batch_id,
-        on_change=lambda s, old_due, new_due: summary.dates_cascaded.append(
+        on_change=lambda s, old_due, new_due: collector.append(
             {"name": s["name"], "old_date": old_due, "new_date": new_due,
              "time": NOW.isoformat()}),
     )
@@ -359,7 +389,12 @@ def _cascade_steps(conn, activity_id, trigger_date_str, summary, batch_id=None):
 
 # ── Step 4: Date Re-cascade ─────────────────────────────────
 
-def reestimate_dates(conn, summary):
+def cascade_dates(conn, summary=None):
+    """Stage 4: re-estimate condition-trigger dates from forecasts and
+    cascade step dates from any moved estimate.
+
+    Returns {"dates_cascaded": [...]}."""
+    result = {"dates_cascaded": []}
     watching = conn.execute(
         "SELECT a.*, d.location FROM activities a JOIN domains d ON a.domain_id=d.id WHERE a.status='watching' AND a.trigger_type='condition'"
     ).fetchall()
@@ -376,7 +411,15 @@ def reestimate_dates(conn, summary):
             conn.execute("UPDATE activities SET trigger_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (estimated, act["id"]))
             engine.log_change(conn, "activity", act["id"], "date_cascade",
                         {"trigger_date": old_date}, {"trigger_date": estimated}, source="cron")
-            _cascade_steps(conn, act["id"], estimated, summary)
+            _cascade_steps(conn, act["id"], estimated, result["dates_cascaded"])
+
+    if summary is not None:
+        summary.dates_cascaded.extend(result["dates_cascaded"])
+    return result
+
+
+# Pre-Step-48 name; the stage was renamed to match what it does
+reestimate_dates = cascade_dates
 
 
 def _estimate_trigger_date(conn, location, tdef):
@@ -441,7 +484,12 @@ def _estimate_trigger_date(conn, location, tdef):
 
 # ── Step 5: Overdue Check ────────────────────────────────────
 
-def check_overdue(conn, summary):
+def check_overdue(conn, summary=None):
+    """Stage 5: promote pending steps past their due date to 'due'.
+
+    Returns {"overdue": [{name, due_date}]} -- everything still overdue,
+    both newly promoted and already 'due'."""
+    result = {"overdue": []}
     overdue = conn.execute(
         """SELECT s.*, a.name as activity_name FROM steps s
            JOIN activities a ON s.activity_id = a.id
@@ -456,10 +504,14 @@ def check_overdue(conn, summary):
         if s["status"] != "due":
             engine.transition(conn, "step", s["id"], "overdue",
                               {"source": "cron", "batch_id": batch})
-        summary.overdue.append({
+        result["overdue"].append({
             "name": f'{s["activity_name"]}: {s["name"]}',
             "due_date": s["due_date"],
         })
+
+    if summary is not None:
+        summary.overdue.extend(result["overdue"])
+    return result
 
 
 # ── Step 6: Summary Output ──────────────────────────────────
@@ -511,7 +563,7 @@ def main():
         evaluate_triggers(conn, summary)
         conn.commit()
 
-        reestimate_dates(conn, summary)
+        cascade_dates(conn, summary)
         conn.commit()
 
         check_overdue(conn, summary)

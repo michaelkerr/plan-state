@@ -278,7 +278,15 @@ Test: Load a domain. Modify the definition (add activity, rename activity, chang
 Builds on: Step 46
 
 ### Step 48: Refactor daily_sync into independent stages
-Status: not started
+Status: complete
+Notes: Stages return explicit result dicts (pull_weather: pulled/errors;
+evaluate_conditions: evaluated/met; evaluate_triggers: fired/dates_cascaded;
+cascade_dates: dates_cascaded; check_overdue: overdue) and take an optional
+summary for aggregation -- the 20 existing test call sites kept working
+unchanged. reestimate_dates renamed to cascade_dates (module alias
+preserved). Each stage verified independently callable; pipeline verified
+end-to-end in-container post-refactor. Tests in tests/test_sync_stages.py
+(7).
 What it does: Breaks daily_sync.py's main() into named functions with explicit inputs and outputs: pull_weather(conn) -> WeatherResult, evaluate_conditions(conn, weather) -> ConditionResult, evaluate_triggers(conn) -> TriggerResult, cascade_dates(conn) -> CascadeResult, check_overdue(conn) -> OverdueResult. Each stage is callable independently (useful for re-running trigger evaluation without re-pulling weather, or testing a stage in isolation). main() calls them in sequence and aggregates results into the summary.
 What good looks like: Each stage function is importable and testable independently. Running evaluate_triggers alone (without pull_weather first) works if weather data already exists. The pipeline still runs end-to-end via main().
 Test: Call each stage independently with a seeded DB. Verify outputs match the aggregated main() run. Verify pull_weather can be skipped when weather data exists.
