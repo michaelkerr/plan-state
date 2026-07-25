@@ -196,3 +196,10 @@ What it does: Breaks daily_sync.py's main() into named functions with explicit i
 What good looks like: Each stage function is importable and testable independently. Running evaluate_triggers alone (without pull_weather first) works if weather data already exists. The pipeline still runs end-to-end via main().
 Test: Call each stage independently with a seeded DB. Verify outputs match the aggregated main() run. Verify pull_weather can be skipped when weather data exists.
 Builds on: Step 37 (stages use transition() internally)
+
+### Step 49: Rename daily_sync to sync (naming housekeeping)
+Status: not started
+What it does: The sync has run hourly since 2026-07-25; "daily" in the name no longer matches the functionality. Rename sync/daily_sync.py -> sync/sync_pipeline.py (module can't be sync.sync, pick final name during build), scripts/daily-sync.py -> scripts/sync.py, update register.sh, re-register the cron job's --script reference (hermes cron edit), update test imports and docs (CLAUDE.md project structure, dossier exporter wrapper chain). Low urgency -- fold into Step 48's refactor if convenient, since that step already restructures the same file.
+What good looks like: No file, cron job, or doc says "daily" about the hourly pipeline. All tests pass with new module names. Live cron job runs the renamed script.
+Test: Full regression suite passes after rename. Manual: next hourly run executes clean via the renamed script.
+Builds on: Step 48 (or standalone after it)
