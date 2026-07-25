@@ -1,6 +1,6 @@
 # Yard -- plan state
 
-Generated 2026-07-24T17:00:25 by export_dossier.py from the live plansync DB.
+Generated 2026-07-24T20:00:30 by export_dossier.py from the live plansync DB.
 Do not hand-edit: this file is regenerated daily by the 6 AM sync. For live
 queries or changes, use the plansync MCP tools.
 
@@ -32,18 +32,17 @@ queries or changes, use the plansync MCP tools.
 - 2026-07-20: Step 27 verification: source-attribution test write from Claude desktop MCP registration. Safe to ignore.
 
 ## Conditions watch
-- Aerate, Overseed & Compost Topdress: daily_high <= 85 x3d -- not met, currently 86.86
-- Fall Nitrogen #2: daily_low <= 32 -- not met, currently 64.92
-- Winter Broadleaf Spray: daily_high >= 50 -- MET, currently 86.86
-- Late-Winter Broadleaf Spray: daily_high >= 50 -- MET, currently 86.86
-- Spring Pre-Emergent App 1: daily_high >= 55 x3d -- MET, currently 86.86
+- Aerate, Overseed & Compost Topdress: daily_high <= 85 x3d -- not met, currently 72.45
+- Fall Nitrogen #2: daily_low <= 32 -- not met, currently 72.18
+- Winter Broadleaf Spray: daily_high >= 50 -- MET, currently 72.45
+- Late-Winter Broadleaf Spray: daily_high >= 50 -- MET, currently 72.45
+- Spring Pre-Emergent App 1: daily_high >= 55 x3d -- MET, currently 72.45
 
 ## Recent weather (last 7 days)
-- 2026-07-24: high 86.86, low 64.92, Clouds
+- 2026-07-24: high 72.45, low 72.18, Clouds
 - 2026-07-23: high 82.18, low 74.62, Clouds
 - 2026-07-22: high 88.99, low 73.02, Clouds
 - 2026-07-21: high 93.25, low 81.07, Clouds
 - 2026-07-20: high 90.9, low 79.07, Clouds
 - 2026-07-19: high 89.51, low 73.18, Clouds
 - 2026-07-18: high 89.94, low 73.13, Clouds
-- 2026-07-17: high 90.34, low 72.36, Clear

@@ -88,9 +88,10 @@ existing_jobs=$(docker exec "$CONTAINER" hermes cron list 2>/dev/null)
 if echo "$existing_jobs" | grep -q "plan-sync"; then
     echo "  plan-sync cron already exists"
 else
-    # Delivery is local (file/log only): the 6:00 sync is data prep for the
-    # 6:15 briefing, not a user-facing message (Step 38)
-    docker exec "$CONTAINER" hermes cron create "0 6 * * *" \
+    # Hourly, local delivery (file/log only): the sync is data prep for the
+    # 6:15 briefing and keeps trigger state fresh through the day -- not a
+    # user-facing message (Step 38)
+    docker exec "$CONTAINER" hermes cron create "0 * * * *" \
         --no-agent \
         --script daily-sync.py \
         --deliver local \

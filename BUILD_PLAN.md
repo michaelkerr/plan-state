@@ -94,9 +94,14 @@ Builds on: Step 36
 Status: built (awaiting manual verification)
 Notes: Live job e310e6b9a114 switched via `hermes cron edit --deliver local`
 on 2026-07-24; register.sh updated so fresh registrations use local delivery.
-Verify on 2026-07-25: no 6:00 AM Telegram message, 6:15 briefing still has
-full content (briefing reads sync-output JSON, unaffected by delivery
-target), 5 PM nudge unchanged.
+Same day, schedule changed from daily 6:00 to hourly (0 * * * *) at user
+request -- local delivery makes hourly runs silent, weather upsert keeps one
+row per location per day, trigger evaluation is idempotent. Note: the daily
+sync-output JSON is overwritten each run, so the 6:15 briefing reads the
+6:00 run's output; midday trigger fires appear in DB state but not in the
+next morning's triggers_fired narrative.
+Verify on 2026-07-25: no Telegram messages from plan-sync (now hourly), 6:15
+briefing still has full content, 5 PM nudge unchanged.
 What it does: Change the plan-sync cron job's delivery from Telegram to local (file-only). The sync still runs at 6:00 AM, evaluates triggers, cascades dates, writes JSON output. The heartbeat message no longer goes to Telegram. Morning briefing (6:15) and evening nudge (5:00 PM) remain.
 What good looks like: No 6:00 AM Telegram message. Briefing and nudge unaffected. Sync output JSON still written for briefing-context to read.
 Test: Manual -- verify no Telegram message at 6:00, verify briefing at 6:15 still has full content.
