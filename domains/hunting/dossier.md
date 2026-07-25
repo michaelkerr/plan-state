@@ -1,6 +1,6 @@
 # Hunting -- plan state
 
-Generated 2026-07-25T09:00:45 by export_dossier.py from the live plansync DB.
+Generated 2026-07-25T10:00:46 by export_dossier.py from the live plansync DB.
 Do not hand-edit: this file is regenerated daily by the 6 AM sync. For live
 queries or changes, use the plansync MCP tools.
 
@@ -44,7 +44,7 @@ queries or changes, use the plansync MCP tools.
 - none
 
 ## Recent weather (last 7 days)
-- 2026-07-25: high 88.09, low 70.39, Rain, precip 0.1027557"
+- 2026-07-25: high 88.09, low 71.65, Clouds
 - 2026-07-24: high 70.97, low 70.97, Clouds
 - 2026-07-23: high 82.18, low 74.62, Clouds
 - 2026-07-22: high 88.99, low 73.02, Clouds

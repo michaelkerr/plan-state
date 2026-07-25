@@ -107,8 +107,7 @@ CREATE VIEW IF NOT EXISTS open_steps AS
   FROM steps s
   JOIN activities a ON s.activity_id = a.id
   JOIN domains d ON a.domain_id = d.id
-  WHERE s.status IN ('pending','due')
-    AND s.due_date IS NOT NULL;
+  WHERE s.status IN ('pending','due');
 
 CREATE VIEW IF NOT EXISTS actionable_items AS
   SELECT * FROM open_steps
@@ -129,5 +128,4 @@ CREATE VIEW IF NOT EXISTS open_activities AS
          d.location      AS location
   FROM activities a
   JOIN domains d ON a.domain_id = d.id
-  WHERE a.status IN ('watching','preparing','active')
-    AND a.trigger_date IS NOT NULL;
+  WHERE a.status IN ('watching','preparing','active');

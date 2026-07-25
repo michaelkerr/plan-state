@@ -354,34 +354,44 @@ def react(conn, events, batch_id, source=None):
 
 # ── Shared view layer (Step 39) ──────────────────────────────
 
-def get_actionable_items(conn, as_of_date=None, domain_id=None):
+def get_actionable_items(conn, as_of_date=None, domain_id=None, activity_id=None,
+                         include_undated=False):
     """Steps needing attention, from the shared view definition.
 
     Default: the actionable_items view (due today or overdue, visibility
     from the step's own state regardless of parent activity status).
     as_of_date widens the window over the open_steps base view (used for
-    lookahead); domain_id narrows to one domain."""
+    lookahead); include_undated keeps NULL-due_date steps in a windowed
+    query (get_upcoming shows them; date comparisons drop them otherwise)."""
     source = "actionable_items" if as_of_date is None else "open_steps"
     sql = f"SELECT * FROM {source}"
     clauses, params = [], []
     if as_of_date is not None:
-        clauses.append("due_date <= ?")
+        date_clause = "due_date <= ?"
+        if include_undated:
+            date_clause = f"({date_clause} OR due_date IS NULL)"
+        clauses.append(date_clause)
         params.append(as_of_date)
     if domain_id is not None:
         clauses.append("domain_id = ?")
         params.append(domain_id)
+    if activity_id is not None:
+        clauses.append("activity_id = ?")
+        params.append(activity_id)
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
     sql += " ORDER BY due_date, domain_name, activity_name, step_name"
     return [dict(r) for r in conn.execute(sql, params).fetchall()]
 
 
-def get_open_activities(conn, through_date=None, statuses=None, domain_id=None):
+def get_open_activities(conn, through_date=None, statuses=None, domain_id=None,
+                        include_undated=False):
     """Open activities from the open_activities view.
 
     statuses narrows within the view's open set (e.g. the nudge wants only
     fired activities: ('preparing','active')); through_date bounds
-    trigger_date; ordering is trigger_date-first (callers re-sort for other
+    trigger_date (dropping NULL trigger_dates unless include_undated);
+    ordering is trigger_date-first (callers re-sort for other
     presentations)."""
     sql = "SELECT * FROM open_activities"
     clauses, params = [], []
@@ -389,7 +399,10 @@ def get_open_activities(conn, through_date=None, statuses=None, domain_id=None):
         clauses.append(f"activity_status IN ({','.join('?' * len(statuses))})")
         params.extend(statuses)
     if through_date is not None:
-        clauses.append("trigger_date <= ?")
+        date_clause = "trigger_date <= ?"
+        if include_undated:
+            date_clause = f"({date_clause} OR trigger_date IS NULL)"
+        clauses.append(date_clause)
         params.append(through_date)
     if domain_id is not None:
         clauses.append("domain_id = ?")

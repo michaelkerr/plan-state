@@ -163,7 +163,17 @@ Test: Regression: evening_nudge output matches old output for same DB state. bri
 Builds on: Step 39
 
 ### Step 41: Migrate get_upcoming to the view
-Status: not started
+Status: complete
+Notes: Selection logic lives in the views; _get_upcoming unions open
+activities in the window with parents of actionable steps (so a completed
+activity with a due follow-up appears, status 'completed', has_overdue set
+-- the last surface with the v1 visibility bug). Full rows hydrated by
+primary key (presentation, not selection). Views widened: open_steps /
+open_activities no longer filter NULL dates (date comparisons drop them
+naturally; get_upcoming includes undated via include_undated params on the
+engine getters). View migration re-run live. Response structure/ordering
+preserved (trigger_date NULLS LAST + sort_order, steps NULLs-first by
+due_date). Tests in tests/test_get_upcoming_view.py (11).
 What it does: Rewrites _get_upcoming in server.py to use the actionable_items view for the "due now" portion and a parameterized query against the view for the lookahead window. Removes inline SQL from the MCP server's upcoming logic.
 What good looks like: get_upcoming returns the same structure as before but built from the shared view. Adding a new filter condition to "what's actionable" changes it everywhere at once.
 Test: Regression: get_upcoming output matches old output for same DB state. Overdue steps count matches view results.

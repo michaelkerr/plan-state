@@ -19,7 +19,9 @@ from plansync.engine import (  # noqa: E402
     compute_trigger_date,
     defer_trigger_def,
     derive_conditions,
+    get_actionable_items,
     get_db,
+    get_open_activities,
     log_change,
     new_batch_id,
     react,
@@ -781,29 +783,36 @@ def _get_upcoming(conn, days_ahead) -> list[types.TextContent]:
     cutoff = (date.today() + timedelta(days=days_ahead)).isoformat()
     today_str = date.today().isoformat()
 
-    activities = conn.execute(
-        """SELECT a.*, d.name as domain_name FROM activities a
-           JOIN domains d ON a.domain_id = d.id
-           WHERE a.status IN ('watching','preparing','active')
-             AND (a.trigger_date <= ? OR a.trigger_date IS NULL)
-           ORDER BY a.trigger_date NULLS LAST, a.sort_order""",
-        (cutoff,),
-    ).fetchall()
+    # Which activities are relevant comes from the shared view layer: open
+    # activities in the window, plus any parent of an actionable step in the
+    # window regardless of its own status (a completed activity with a due
+    # follow-up is still worth showing)
+    open_acts = get_open_activities(conn, through_date=cutoff, include_undated=True)
+    window_steps = get_actionable_items(conn, as_of_date=cutoff, include_undated=True)
+    activity_ids = [a["activity_id"] for a in open_acts]
+    for s in window_steps:
+        if s["activity_id"] not in activity_ids:
+            activity_ids.append(s["activity_id"])
 
     result = []
-    for a in activities:
+    for aid in activity_ids:
+        # Hydrate the full row by primary key -- selection logic stays in the views
+        a = conn.execute(
+            "SELECT a.*, d.name as domain_name FROM activities a "
+            "JOIN domains d ON a.domain_id = d.id WHERE a.id=?", (aid,)).fetchone()
         a = row_to_dict(a)
+        step_ids = [s["step_id"] for s in window_steps if s["activity_id"] == aid]
         a["steps"] = [
-            row_to_dict(s)
-            for s in conn.execute(
-                "SELECT * FROM steps WHERE activity_id=? AND status IN ('pending','due') AND (due_date <= ? OR due_date IS NULL) ORDER BY due_date",
-                (a["id"], cutoff),
-            ).fetchall()
+            row_to_dict(conn.execute("SELECT * FROM steps WHERE id=?", (sid,)).fetchone())
+            for sid in step_ids
         ]
+        a["steps"].sort(key=lambda s: (s["due_date"] is not None, s["due_date"] or ""))
         overdue_steps = [s for s in a["steps"] if s.get("due_date") and s["due_date"] < today_str]
         a["has_overdue"] = len(overdue_steps) > 0
         result.append(a)
 
+    result.sort(key=lambda a: (a["trigger_date"] is None, a["trigger_date"] or "",
+                               a.get("sort_order") or 0))
     return ok({"today": today_str, "cutoff": cutoff, "items": result})
 
 
