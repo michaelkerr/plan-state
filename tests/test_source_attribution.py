@@ -113,7 +113,7 @@ class TestSourceAttribution:
 
     def test_cron_pipeline_still_logs_cron(self, db, monkeypatch):
         monkeypatch.setenv("PLANSYNC_CLIENT", "claude")  # must not affect the cron path
-        import daily_sync
+        import sync_pipeline
         db.execute("INSERT INTO domains (id, name, location) VALUES ('d1','D','X')")
         db.execute(
             "INSERT INTO activities (id,domain_id,name,trigger_type,trigger_def,trigger_date,status) "
@@ -123,7 +123,7 @@ class TestSourceAttribution:
             "INSERT INTO steps (id,activity_id,name,step_type,lead_days,status) VALUES ('s1','a1','After','follow_up',2,'pending')"
         )
         db.commit()
-        daily_sync.evaluate_triggers(db, daily_sync.SyncSummary())
+        sync_pipeline.evaluate_triggers(db, sync_pipeline.SyncSummary())
         db.commit()
         assert len(log_sources(db)) > 0
         assert log_sources(db) == {"cron"}

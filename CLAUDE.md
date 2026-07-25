@@ -41,13 +41,13 @@ plan-state/
 │   ├── server.py               # MCP server over stdio JSON-RPC
 │   └── requirements.txt        # mcp>=1.0.0
 ├── sync/
-│   ├── daily_sync.py           # Deterministic sync pipeline (weather, conditions, triggers, cascade, overdue); hourly
+│   ├── sync_pipeline.py        # Deterministic sync pipeline (weather, conditions, triggers, cascade, overdue); hourly
 │   ├── evening_nudge.py        # Evening "still open today" reminder (silent when clear)
 │   ├── briefing_context.py     # Morning briefing context (sync output, 24h fires, due/week via views)
 │   ├── export_dossier.py       # Per-domain markdown state files → domains/{slug}/dossier.md (generated)
 │   └── requirements.txt        # requests
 ├── scripts/                    # Cron wrappers (copied to Hermes data dir by register.sh) + one-time migrations
-│   ├── daily-sync.py           # Delegates to sync/daily_sync.py, then sync/export_dossier.py
+│   ├── sync.py                 # Delegates to sync/sync_pipeline.py, then sync/export_dossier.py
 │   ├── briefing-context.py     # Delegates to sync/briefing_context.py
 │   ├── briefing-context.sh     # Shell wrapper for briefing-context.py
 │   ├── evening-nudge.py        # Delegates to sync/evening_nudge.py
@@ -87,7 +87,7 @@ plan-state/
 - One authoring path: load_domain (new domain) / add_activities (grow a domain, including single activities); one modification path: update_activity / update_step / complete_activity / defer_activity / delete_activity (soft skip by default, permanent=true erases). The single-shot create_domain and create_activity tools were removed (Step 22)
 - Deferral is a date move, not a status: defer_activity requires new_date, rewrites trigger_def via engine.defer_trigger_def (calendar date moved, compound calendar leg moved, condition/dependency wrapped with an earliest-date gate), and returns the activity to 'watching' so the cron re-fires it. There is no 'deferred' status
 - No recurrence, no step conditions, no soil_temp -- all were write-only surface; validation rejects them with actionable errors. Valid condition metrics: daily_high, daily_low, temp_high, temp_low (unknown metrics rejected)
-- Shared logic lives in `plansync/engine.py` (get_db, log_change, cascade_step_dates, compute_trigger_date, step_due_date, row_to_dict); server.py, daily_sync.py, and evening_nudge.py import it and must not define local copies (enforced by tests/test_engine_extraction.py). DB path and client identity resolve from env (`PLANSYNC_DB`, `PLANSYNC_CLIENT`) at call time
+- Shared logic lives in `plansync/engine.py` (get_db, log_change, cascade_step_dates, compute_trigger_date, step_due_date, row_to_dict); server.py, sync_pipeline.py, and evening_nudge.py import it and must not define local copies (enforced by tests/test_engine_extraction.py). DB path and client identity resolve from env (`PLANSYNC_DB`, `PLANSYNC_CLIENT`) at call time
 - activity_log source attribution: `cron` (sync pipeline, passed explicitly), `hermes`/`claude` (via PLANSYNC_CLIENT env on the MCP server), `human` (reserved)
 - activity_log.batch_id groups all log entries produced by one operation (completion + cascaded steps + dependency fires) into one reversible unit for undo (Step 45). log_change takes optional batch_id; standalone entries stay NULL
 - Status changes route through engine.transition(conn, entity_type, entity_id, event, context) -- validates against ACTIVITY_TRANSITIONS/STEP_TRANSITIONS tables, raises ValueError on invalid moves, returns side-effect events for engine.react(conn, events, batch_id). No raw `UPDATE ... SET status=` anywhere. trigger_fire resolves preparing-vs-active by whether prep steps exist; revert (undo's event, legal from every state) takes context['to_status']; context old_extra/extra put prior/new field values in the log entry so undo can restore them
@@ -114,5 +114,5 @@ plan-state/
 - **v2: plan-management-first architecture (2026-07-24)** -- v1 was built trigger-first (trigger_def is the most complex structure, trigger evaluation the most complex code). v2 inverts this: the plan hierarchy (domain/activity/step) is the foundation with simple CRUD, triggers are optional enrichment, step visibility is independent of parent activity status, and all state changes route through explicit transition tables with a cascade reactor. Rationale and full design in plansync-redesign.md (project doc). v1 build history archived to docs/archive/BUILD_PLAN_V1.md
 
 ## Inconsistencies
-- **daily_sync's check_overdue query is still its own SQL** -- evening_nudge, briefing_context, and get_upcoming all read the shared views (Steps 39-41); check_overdue composes its own overdue query (candidate for Step 48's stage refactor). Step visibility everywhere else is the step's own state, independent of parent activity status.
+- **sync_pipeline's check_overdue query is still its own SQL** -- evening_nudge, briefing_context, and get_upcoming all read the shared views (Steps 39-41); check_overdue composes its own overdue query (candidate for Step 48's stage refactor). Step visibility everywhere else is the step's own state, independent of parent activity status.
 - **complete_activity ignores steps with status='due'** -- line 672 in server.py only auto-completes prep steps with status='pending'. Steps promoted to 'due' by the overdue checker are orphaned on activity completion. Tracked until Phase 1 (Step 36) migrates to transition().

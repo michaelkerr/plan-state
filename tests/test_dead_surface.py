@@ -99,13 +99,13 @@ class TestDeferFix:
         assert "error" in out
 
     def test_deferred_activity_fires_on_new_date(self, db):
-        import daily_sync
+        import sync_pipeline
         result = load()
         act = result["activities"][0]
         # defer to a date already past -> next trigger evaluation fires it
         call("_defer_activity", {"activity_id": act["id"], "new_date": "2020-01-15", "reason": "r"})
-        summary = daily_sync.SyncSummary()
-        daily_sync.evaluate_triggers(db, summary)
+        summary = sync_pipeline.SyncSummary()
+        sync_pipeline.evaluate_triggers(db, summary)
         db.commit()
         assert "Calendar Act" in {t["name"] for t in summary.triggers_fired}
         assert db.execute("SELECT status FROM activities WHERE id=?", (act["id"],)).fetchone()["status"] == "preparing"
@@ -160,14 +160,14 @@ class TestOverdueParentFilter:
         ("completed", False), ("skipped", False),
     ])
     def test_overdue_respects_parent_status(self, db, parent_status, expected):
-        import daily_sync
+        import sync_pipeline
         result = load()
         act = result["activities"][0]
         self._make_overdue_step(db, act["id"])
         db.execute("UPDATE activities SET status=? WHERE id=?", (parent_status, act["id"]))
         db.commit()
-        summary = daily_sync.SyncSummary()
-        daily_sync.check_overdue(db, summary)
+        summary = sync_pipeline.SyncSummary()
+        sync_pipeline.check_overdue(db, summary)
         names = {o["name"] for o in summary.overdue}
         assert any("Calendar Act" in n for n in names) == expected
 

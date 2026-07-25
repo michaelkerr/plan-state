@@ -9,7 +9,7 @@ trigger_def are resolved back to activity_ref name strings, and conditions
 (derived from trigger_def) are omitted.
 
 Run after export_dossier.py in the 6 AM cron chain:
-    daily_sync.py  ->  export_dossier.py  ->  export_domain_json.py
+    sync_pipeline.py  ->  export_dossier.py  ->  export_domain_json.py
 
 Output layout:
     domains/{slug}/{slug}.json

@@ -2,7 +2,7 @@
 """Step 28: shared engine module -- no duplicated domain logic.
 
 cascade/trigger-date/log/db logic lives only in plansync/engine.py;
-server.py and daily_sync.py import it instead of keeping local copies.
+server.py and sync_pipeline.py import it instead of keeping local copies.
 """
 
 import json
@@ -26,16 +26,16 @@ def source_of(*parts):
 
 
 class TestNoLocalDefinitions:
-    @pytest.mark.parametrize("path", [("mcp-server", "server.py"), ("sync", "daily_sync.py"), ("sync", "evening_nudge.py")])
+    @pytest.mark.parametrize("path", [("mcp-server", "server.py"), ("sync", "sync_pipeline.py"), ("sync", "evening_nudge.py")])
     def test_no_local_copies_of_extracted_functions(self, path):
         src = source_of(*path)
         for name in EXTRACTED:
             assert f"def {name}(" not in src, f"{'/'.join(path)} still defines {name} locally"
 
-    def test_no_local_cascade_arithmetic_in_daily_sync(self):
+    def test_no_local_cascade_arithmetic_in_sync_pipeline(self):
         # the old _cascade_steps carried its own prep/follow-up date math;
         # any surviving wrapper must delegate to the engine
-        src = source_of("sync", "daily_sync.py")
+        src = source_of("sync", "sync_pipeline.py")
         if "_cascade_steps" in src:
             assert "engine.cascade_step_dates" in src or "cascade_step_dates(" in src
             assert "timedelta(days=s[" not in src

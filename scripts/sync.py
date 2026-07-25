@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Wrapper for the daily sync cron job. Hermes no-agent cron calls this script.
+Wrapper for the hourly sync cron job. Hermes no-agent cron calls this script.
 It delegates to the canonical sync script in /opt/plansync/sync/.
 """
 
@@ -8,7 +8,7 @@ import os
 import subprocess
 import sys
 
-SYNC_SCRIPT = "/opt/plansync/sync/daily_sync.py"
+SYNC_SCRIPT = "/opt/plansync/sync/sync_pipeline.py"
 DOSSIER_SCRIPT = "/opt/plansync/sync/export_dossier.py"
 DOMAIN_JSON_SCRIPT = "/opt/plansync/sync/export_domain_json.py"
 

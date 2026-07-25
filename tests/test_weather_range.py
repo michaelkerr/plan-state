@@ -10,7 +10,7 @@ import pytest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "sync"))
 
-import daily_sync
+import sync_pipeline
 
 
 CDT_OFFSET = -18000  # UTC-5 (Murfreesboro in summer)
@@ -54,25 +54,25 @@ FORECAST = make_forecast([
 
 class TestDeriveDailyRange:
     def test_high_comes_from_afternoon_forecast(self):
-        high, low = daily_sync.derive_daily_range(72.0, FORECAST, NOW_UTC)
+        high, low = sync_pipeline.derive_daily_range(72.0, FORECAST, NOW_UTC)
         assert high == 97.1  # 4 PM peak temp_max, not the 6 AM current reading
 
     def test_low_blends_current_morning_reading(self):
-        high, low = daily_sync.derive_daily_range(72.0, FORECAST, NOW_UTC)
+        high, low = sync_pipeline.derive_daily_range(72.0, FORECAST, NOW_UTC)
         assert low == 72.0  # current 6 AM reading is below all remaining forecast temps
 
     def test_current_above_forecast_sets_high(self):
-        high, low = daily_sync.derive_daily_range(99.0, FORECAST, NOW_UTC)
+        high, low = sync_pipeline.derive_daily_range(99.0, FORECAST, NOW_UTC)
         assert high == 99.0
 
     def test_forecast_low_below_current(self):
         # evening-ish current reading; forecast morning entry is the low
-        high, low = daily_sync.derive_daily_range(90.0, FORECAST, NOW_UTC)
+        high, low = sync_pipeline.derive_daily_range(90.0, FORECAST, NOW_UTC)
         assert low == 75.4
 
     def test_next_local_day_entries_excluded(self):
         # the 73.3 entry is July 4 local; it must not drag July 3's low down
-        high, low = daily_sync.derive_daily_range(80.0, FORECAST, NOW_UTC)
+        high, low = sync_pipeline.derive_daily_range(80.0, FORECAST, NOW_UTC)
         assert low == 75.4
         assert low != 73.3
 
@@ -84,21 +84,21 @@ class TestDeriveDailyRange:
             ("2026-07-03 15:00:00", 60.0, 60.0, 60.0),
             ("2026-07-03 18:00:00", 65.0, 65.0, 65.0),
         ])
-        high, low = daily_sync.derive_daily_range(55.0, cold_day, NOW_UTC)
+        high, low = sync_pipeline.derive_daily_range(55.0, cold_day, NOW_UTC)
         assert high == 65.0
 
     def test_no_entries_for_today_falls_back_to_current(self):
         tomorrow_only = make_forecast([
             ("2026-07-04 12:00:00", 80.0, 80.0, 80.0),
         ])
-        high, low = daily_sync.derive_daily_range(71.5, tomorrow_only, NOW_UTC)
+        high, low = sync_pipeline.derive_daily_range(71.5, tomorrow_only, NOW_UTC)
         assert high == 71.5
         assert low == 71.5
 
     def test_empty_forecast_falls_back_to_current(self):
-        high, low = daily_sync.derive_daily_range(71.5, {"list": []}, NOW_UTC)
+        high, low = sync_pipeline.derive_daily_range(71.5, {"list": []}, NOW_UTC)
         assert (high, low) == (71.5, 71.5)
 
     def test_missing_forecast_falls_back_to_current(self):
-        high, low = daily_sync.derive_daily_range(71.5, None, NOW_UTC)
+        high, low = sync_pipeline.derive_daily_range(71.5, None, NOW_UTC)
         assert (high, low) == (71.5, 71.5)

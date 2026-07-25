@@ -13,9 +13,9 @@
 #
 # NO RE-RUN NEEDED:
 #   - Editing skills/*.md (loaded via external_dirs, live immediately)
-#   - Editing mcp-server/server.py, sync/daily_sync.py, schema.sql
+#   - Editing mcp-server/server.py, sync/sync_pipeline.py, schema.sql
 #     (volume-mounted directly, live immediately)
-#   - Editing the code that scripts delegate to (sync/daily_sync.py etc.
+#   - Editing the code that scripts delegate to (sync/sync_pipeline.py etc.
 #     is volume-mounted, so changes are live even though the wrapper is copied)
 set -euo pipefail
 
@@ -42,11 +42,19 @@ for skill in plansync.md plansync-briefing.md domain-authoring.md; do
         echo "  Removed old skill copy: $skill"
     fi
 done
-for script in daily-sync.py briefing-context.py briefing-context.sh evening-nudge.py; do
+for script in sync.py briefing-context.py briefing-context.sh evening-nudge.py; do
     target="/opt/data/scripts/$script"
     if docker exec "$CONTAINER" test -L "$target" 2>/dev/null; then
         docker exec "$CONTAINER" rm "$target"
         echo "  Removed stale symlink: $script"
+    fi
+done
+# Retired wrapper names (daily-sync.py renamed to sync.py, Step 49)
+for script in daily-sync.py; do
+    target="/opt/data/scripts/$script"
+    if docker exec "$CONTAINER" test -f "$target" 2>/dev/null; then
+        docker exec "$CONTAINER" rm "$target"
+        echo "  Removed retired script: $script"
     fi
 done
 
@@ -93,7 +101,7 @@ else
     # user-facing message (Step 38)
     docker exec "$CONTAINER" hermes cron create "0 * * * *" \
         --no-agent \
-        --script daily-sync.py \
+        --script sync.py \
         --deliver local \
         --name "plan-sync"
 fi

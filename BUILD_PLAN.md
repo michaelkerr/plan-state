@@ -293,7 +293,13 @@ Test: Call each stage independently with a seeded DB. Verify outputs match the a
 Builds on: Step 37 (stages use transition() internally)
 
 ### Step 49: Rename daily_sync to sync (naming housekeeping)
-Status: not started
+Status: complete
+Notes: sync/daily_sync.py -> sync/sync_pipeline.py, scripts/daily-sync.py ->
+scripts/sync.py. Live cron job repointed (hermes cron edit --script sync.py),
+new wrapper copied in, retired daily-sync.py copy removed from the container;
+register.sh cleans up the retired name on future runs. Tests and docs updated
+wholesale; renamed pipeline verified with a live run. reestimate_dates alias
+inside the module retained from Step 48 (cascade_dates).
 What it does: The sync has run hourly since 2026-07-25; "daily" in the name no longer matches the functionality. Rename sync/daily_sync.py -> sync/sync_pipeline.py (module can't be sync.sync, pick final name during build), scripts/daily-sync.py -> scripts/sync.py, update register.sh, re-register the cron job's --script reference (hermes cron edit), update test imports and docs (CLAUDE.md project structure, dossier exporter wrapper chain). Low urgency -- fold into Step 48's refactor if convenient, since that step already restructures the same file.
 What good looks like: No file, cron job, or doc says "daily" about the hourly pipeline. All tests pass with new module names. Live cron job runs the renamed script.
 Test: Full regression suite passes after rename. Manual: next hourly run executes clean via the renamed script.

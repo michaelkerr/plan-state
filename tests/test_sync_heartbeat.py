@@ -12,17 +12,17 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "sync"))
 
-import daily_sync
+import sync_pipeline
 
 
 def test_clean_run_still_reports_clean():
-    s = daily_sync.SyncSummary()
+    s = sync_pipeline.SyncSummary()
     out = s.to_stdout()
     assert "ran clean, no changes" in out
 
 
 def test_errors_only_run_never_claims_clean():
-    s = daily_sync.SyncSummary()
+    s = sync_pipeline.SyncSummary()
     s.errors.append("Weather pull failed for Murfreesboro: 401 Unauthorized")
     out = s.to_stdout()
     assert "ran clean" not in out
@@ -31,7 +31,7 @@ def test_errors_only_run_never_claims_clean():
 
 
 def test_multiple_errors_all_reported():
-    s = daily_sync.SyncSummary()
+    s = sync_pipeline.SyncSummary()
     s.errors.append("Weather pull failed for Murfreesboro: timeout")
     s.errors.append("OPENWEATHERMAP_API_KEY not set, skipping weather pull")
     out = s.to_stdout()
@@ -41,7 +41,7 @@ def test_multiple_errors_all_reported():
 
 
 def test_multiline_error_reported_as_one_line():
-    s = daily_sync.SyncSummary()
+    s = sync_pipeline.SyncSummary()
     s.errors.append("Fatal: something broke\nTraceback (most recent call last):\n  ...")
     out = s.to_stdout()
     assert "Fatal: something broke" in out
@@ -49,7 +49,7 @@ def test_multiline_error_reported_as_one_line():
 
 
 def test_changes_and_errors_both_reported():
-    s = daily_sync.SyncSummary()
+    s = sync_pipeline.SyncSummary()
     s.triggers_fired.append({"name": "Summer Fungicide Watch", "reason": "condition met"})
     s.errors.append("Weather pull failed for Murfreesboro: 500")
     out = s.to_stdout()
@@ -59,7 +59,7 @@ def test_changes_and_errors_both_reported():
 
 
 def test_changes_without_errors_has_no_error_section():
-    s = daily_sync.SyncSummary()
+    s = sync_pipeline.SyncSummary()
     s.triggers_fired.append({"name": "Summer Fungicide Watch", "reason": "condition met"})
     out = s.to_stdout()
     assert "errors" not in out
@@ -68,7 +68,7 @@ def test_changes_without_errors_has_no_error_section():
 # ── Step 32: counts only, no item detail ─────────────────────
 
 def _busy_summary():
-    s = daily_sync.SyncSummary()
+    s = sync_pipeline.SyncSummary()
     s.triggers_fired.append({"name": "Summer Fungicide Watch", "reason": "condition met"})
     s.dates_cascaded.append({"name": "Apply fungicide", "old_date": "2026-07-05", "new_date": "2026-07-08"})
     s.overdue.append({"name": "Yard: Water in application", "due_date": "2026-07-15"})

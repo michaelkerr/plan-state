@@ -14,7 +14,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "sync"))
 sys.path.insert(0, ROOT)
 
-import daily_sync  # noqa: E402
+import sync_pipeline  # noqa: E402
 
 SCHEMA_PATH = os.path.join(ROOT, "schema.sql")
 TODAY = date.today()
@@ -48,7 +48,7 @@ def seed_watching_calendar(db, aid="a1", trigger_date=YESTERDAY):
 class TestStandaloneStages:
     def test_evaluate_triggers_returns_fired_without_summary(self, db):
         seed_watching_calendar(db)
-        result = daily_sync.evaluate_triggers(db)
+        result = sync_pipeline.evaluate_triggers(db)
         db.commit()
         assert [f["name"] for f in result["fired"]] == ["a1"]
         assert db.execute("SELECT status FROM activities WHERE id='a1'").fetchone()["status"] == "active"
@@ -68,7 +68,7 @@ class TestStandaloneStages:
             "INSERT INTO weather_log (location, weather_date, temp_high, temp_low) "
             "VALUES ('Murfreesboro,TN,US', ?, 80, 60)", (TODAY.isoformat(),))
         db.commit()
-        result = daily_sync.evaluate_conditions(db)
+        result = sync_pipeline.evaluate_conditions(db)
         db.commit()
         assert result["evaluated"] == 1
         assert result["met"] == 1
@@ -79,7 +79,7 @@ class TestStandaloneStages:
         db.execute("INSERT INTO steps (id, activity_id, name, step_type, status, due_date) "
                    "VALUES ('s1','a1','S','prep','pending',?)", (YESTERDAY,))
         db.commit()
-        result = daily_sync.check_overdue(db)
+        result = sync_pipeline.check_overdue(db)
         db.commit()
         assert len(result["overdue"]) == 1
         assert db.execute("SELECT status FROM steps WHERE id='s1'").fetchone()["status"] == "due"
@@ -87,12 +87,12 @@ class TestStandaloneStages:
     def test_cascade_dates_returns_moves(self, db):
         seed_watching_calendar(db, trigger_date=(TODAY + timedelta(days=10)).isoformat())
         # condition-triggered activity with an estimated date that will move
-        result = daily_sync.cascade_dates(db)
+        result = sync_pipeline.cascade_dates(db)
         assert "dates_cascaded" in result
 
     def test_pull_weather_without_key_reports_error(self, db, monkeypatch):
-        monkeypatch.setattr(daily_sync, "OWM_KEY", "")
-        result = daily_sync.pull_weather(db)
+        monkeypatch.setattr(sync_pipeline, "OWM_KEY", "")
+        result = sync_pipeline.pull_weather(db)
         assert result["errors"]
         assert result["pulled"] == []
 
@@ -104,14 +104,14 @@ class TestSummaryAggregation:
         db.execute("INSERT INTO steps (id, activity_id, name, step_type, status, due_date) "
                    "VALUES ('s1','a2','S','prep','pending',?)", (YESTERDAY,))
         db.commit()
-        summary = daily_sync.SyncSummary()
-        fired = daily_sync.evaluate_triggers(db, summary)
+        summary = sync_pipeline.SyncSummary()
+        fired = sync_pipeline.evaluate_triggers(db, summary)
         db.commit()
-        overdue = daily_sync.check_overdue(db, summary)
+        overdue = sync_pipeline.check_overdue(db, summary)
         db.commit()
         assert summary.triggers_fired == fired["fired"]
         assert summary.overdue == overdue["overdue"]
 
     def test_legacy_alias_reestimate_dates(self, db):
         # Old name kept as an alias so external callers don't break
-        assert daily_sync.reestimate_dates is daily_sync.cascade_dates
+        assert sync_pipeline.reestimate_dates is sync_pipeline.cascade_dates

@@ -22,9 +22,9 @@ TODAY = date.today()
 
 @pytest.fixture
 def out_dir(tmp_path, monkeypatch):
-    import daily_sync
+    import sync_pipeline
     d = str(tmp_path / "sync-output")
-    monkeypatch.setattr(daily_sync, "OUTPUT_DIR", d)
+    monkeypatch.setattr(sync_pipeline, "OUTPUT_DIR", d)
     return d
 
 
@@ -35,16 +35,16 @@ def daily_file(out_dir):
 
 class TestSaveOutputAccumulation:
     def test_two_runs_accumulate_events_and_replace_overdue(self, out_dir):
-        import daily_sync
-        s1 = daily_sync.SyncSummary()
+        import sync_pipeline
+        s1 = sync_pipeline.SyncSummary()
         s1.triggers_fired.append({"name": "A", "reason": "calendar", "time": "T1"})
         s1.overdue.append({"name": "X: step", "due_date": "2026-07-20"})
-        daily_sync.save_output(s1)
+        sync_pipeline.save_output(s1)
 
-        s2 = daily_sync.SyncSummary()
+        s2 = sync_pipeline.SyncSummary()
         s2.triggers_fired.append({"name": "B", "reason": "condition", "time": "T2"})
         s2.dates_cascaded.append({"name": "S", "old_date": "a", "new_date": "b"})
-        daily_sync.save_output(s2)
+        sync_pipeline.save_output(s2)
 
         out = daily_file(out_dir)
         assert [t["name"] for t in out["triggers_fired"]] == ["A", "B"]
@@ -54,38 +54,38 @@ class TestSaveOutputAccumulation:
         assert out["last_run"]
 
     def test_first_run_counts_one(self, out_dir):
-        import daily_sync
-        daily_sync.save_output(daily_sync.SyncSummary())
+        import sync_pipeline
+        sync_pipeline.save_output(sync_pipeline.SyncSummary())
         out = daily_file(out_dir)
         assert out["runs"] == 1
 
     def test_corrupt_prior_file_starts_fresh(self, out_dir):
-        import daily_sync
+        import sync_pipeline
         os.makedirs(out_dir, exist_ok=True)
         path = os.path.join(out_dir, f"{TODAY.isoformat()}.json")
         with open(path, "w") as f:
             f.write("{not json")
-        s = daily_sync.SyncSummary()
+        s = sync_pipeline.SyncSummary()
         s.triggers_fired.append({"name": "A", "reason": "r", "time": "T"})
-        daily_sync.save_output(s)
+        sync_pipeline.save_output(s)
         out = daily_file(out_dir)
         assert [t["name"] for t in out["triggers_fired"]] == ["A"]
         assert out["runs"] == 1
 
     def test_errors_accumulate(self, out_dir):
-        import daily_sync
-        s1 = daily_sync.SyncSummary()
+        import sync_pipeline
+        s1 = sync_pipeline.SyncSummary()
         s1.errors.append("weather API timeout")
-        daily_sync.save_output(s1)
-        s2 = daily_sync.SyncSummary()
+        sync_pipeline.save_output(s1)
+        s2 = sync_pipeline.SyncSummary()
         s2.errors.append("weather API 500")
-        daily_sync.save_output(s2)
+        sync_pipeline.save_output(s2)
         assert daily_file(out_dir)["errors"] == ["weather API timeout", "weather API 500"]
 
 
 class TestEventTimestamps:
     def test_trigger_fire_entries_carry_time(self, tmp_path, monkeypatch):
-        import daily_sync
+        import sync_pipeline
         path = str(tmp_path / "test.db")
         monkeypatch.setenv("PLANSYNC_DB", path)
         conn = sqlite3.connect(path)
@@ -100,8 +100,8 @@ class TestEventTimestamps:
             (json.dumps({"type": "calendar", "date": yesterday}), yesterday),
         )
         conn.commit()
-        summary = daily_sync.SyncSummary()
-        daily_sync.evaluate_triggers(conn, summary)
+        summary = sync_pipeline.SyncSummary()
+        sync_pipeline.evaluate_triggers(conn, summary)
         conn.commit()
         conn.close()
         assert summary.triggers_fired[0]["time"]

@@ -2,7 +2,7 @@
 """
 Dossier export: one markdown state file per domain, so a Claude session
 WITHOUT MCP access (mobile, web chat) can read current plan state instantly.
-Deterministic, zero LLM tokens. Runs after daily_sync in the 6 AM cron; all
+Deterministic, zero LLM tokens. Runs after sync_pipeline in the hourly cron; all
 human-facing output goes to files, never stdout (the cron wrapper's stdout is
 delivered to Telegram).
 

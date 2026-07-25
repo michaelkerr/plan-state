@@ -181,7 +181,7 @@ class TestUpdateRederivation:
 class TestEndToEndFiring:
     def test_derived_conditions_fire_trigger(self, db):
         """Seed qualifying weather, run the cron eval steps, compound fires."""
-        import daily_sync
+        import sync_pipeline
         load(DOMAIN)
         for day_offset in (2, 1, 0):
             db.execute(
@@ -190,10 +190,10 @@ class TestEndToEndFiring:
                 (f"-{day_offset} days", f"-{day_offset} days"),
             )
         db.commit()
-        summary = daily_sync.SyncSummary()
-        daily_sync.evaluate_conditions(db, summary)
+        summary = sync_pipeline.SyncSummary()
+        sync_pipeline.evaluate_conditions(db, summary)
         db.commit()
-        daily_sync.evaluate_triggers(db, summary)
+        sync_pipeline.evaluate_triggers(db, summary)
         db.commit()
         fired = {t["name"] for t in summary.triggers_fired}
         # Compound Act: calendar leg (2020) passed, daily_high<=85 x2 and

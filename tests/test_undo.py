@@ -147,14 +147,14 @@ class TestUndoOtherOperations:
 
     def test_undo_cron_trigger_fire(self, db):
         sys.path.insert(0, os.path.join(ROOT, "sync"))
-        import daily_sync
+        import sync_pipeline
         yesterday = (TODAY - timedelta(days=1)).isoformat()
         db.execute(
             "INSERT INTO activities (id, domain_id, name, status, trigger_type, trigger_def, trigger_date) "
             "VALUES ('a9','d1','Fire','watching','calendar',?,?)",
             (json.dumps({"type": "calendar", "date": yesterday}), yesterday))
         db.commit()
-        daily_sync.evaluate_triggers(db, daily_sync.SyncSummary())
+        sync_pipeline.evaluate_triggers(db, sync_pipeline.SyncSummary())
         db.commit()
         assert db.execute("SELECT status FROM activities WHERE id='a9'").fetchone()["status"] == "active"
         result = call("_undo", {})
