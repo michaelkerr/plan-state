@@ -1,15 +1,15 @@
 ---
 name: plansync-domain-authoring
-description: Plan or grow a life domain (garden, yard, lawn, hunting, health, home maintenance) in the plan-state/Gideon system. Use when the user wants to plan a season or project ("help me plan my fall garden", "set up my hunting season"), add activities to an existing domain ("add tomatoes to my garden"), or restructure domain plans. Runs the authoring conversation, then loads the result via the plansync MCP tools.
+description: Plan or grow a life domain (garden, yard, lawn, hunting, health, home maintenance) in the plan-state/Brodie system. Use when the user wants to plan a season or project ("help me plan my fall garden", "set up my hunting season"), add activities to an existing domain ("add tomatoes to my garden"), or restructure domain plans. Runs the authoring conversation, then loads the result via the plansync MCP tools.
 ---
 
 # Plansync domain authoring (Claude wrapper)
 
-The canonical skill lives in the plan-state repo and is shared with Gideon
+The canonical skill lives in the plan-state repo and is shared with Brodie
 (Hermes/Telegram) so both agents author by identical rules. Do not duplicate
 its content here — read it and follow it exactly:
 
-1. **Read** `/Volumes/Elements/Projects/plan-state/skills/domain-authoring.md`
+1. **Read** `/Users/michaelkerr/Projects/plan-state/skills/domain-authoring.md`
    — conversation flow, domain-scoping rules, activity-vs-step rule,
    trigger-format reference, validation rules, and complete examples.
 

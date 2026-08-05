@@ -43,7 +43,7 @@ Probe for things the user might forget:
 There are two paths:
 
 ### Option A: Load via Hermes (Telegram)
-Message Gideon on Telegram:
+Message Brodie on Telegram:
 ```
 Use the plansync tools. Call load_domain with this definition: <paste JSON>
 ```
@@ -56,7 +56,7 @@ Read /opt/plansync/examples/<filename>.json and call load_domain with its conten
 If the Mac Mini is running and you have shell access:
 ```bash
 # Pipe the definition through the MCP server directly
-docker exec -i gideon-gateway python3 -c "
+docker exec -i brodie-gateway python3 -c "
 import json, sys
 sys.path.insert(0, '/opt/plansync/mcp-server')
 import server

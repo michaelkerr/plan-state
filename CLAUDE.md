@@ -3,7 +3,7 @@
 # Plan-State
 
 ## What this is
-A condition-aware activity orchestrator for personal life domains (lawn care, gardening, hunting, health, home maintenance). It turns LLM-generated domain plans into managed, condition-aware tasks that re-cascade automatically when things slip, complete, or change. Deployed as a capability that registers into a running Hermes Agent instance (branded "Gideon") on a Mac Mini home server. Telegram is the sole task surface: an hourly cron pipeline (zero LLM tokens, local delivery) pulls weather, evaluates triggers, and cascades dates; an LLM morning briefing at 6:15 reads the 6:00 run's output, and a deterministic evening nudge at 5 PM lists anything still open (silent on clear days). Completions are conversational -- the user tells Gideon (Telegram) or Claude, which calls complete_activity. Hermes and Claude are peer agents of the same engine: both use the same MCP server and authoring skill, with writes distinguished by source attribution (docs/claude-setup.md covers the Claude side). Per-domain dossier files (domains/{slug}/dossier.md, regenerated daily) orient sessions without MCP access.
+A condition-aware activity orchestrator for personal life domains (lawn care, gardening, hunting, health, home maintenance). It turns LLM-generated domain plans into managed, condition-aware tasks that re-cascade automatically when things slip, complete, or change. Deployed as a capability that registers into a running Hermes Agent instance (branded "Brodie") on a Mac Mini home server. Telegram is the sole task surface: an hourly cron pipeline (zero LLM tokens, local delivery) pulls weather, evaluates triggers, and cascades dates; an LLM morning briefing at 6:15 reads the 6:00 run's output, and a deterministic evening nudge at 5 PM lists anything still open (silent on clear days). Completions are conversational -- the user tells Brodie (Telegram) or Claude, which calls complete_activity. Hermes and Claude are peer agents of the same engine: both use the same MCP server and authoring skill, with writes distinguished by source attribution (docs/claude-setup.md covers the Claude side). Per-domain dossier files (domains/{slug}/dossier.md, regenerated daily) orient sessions without MCP access.
 
 ## Build protocol
 - The build plan lives in BUILD_PLAN.md. Read it at the start of every session.
@@ -68,9 +68,9 @@ plan-state/
     └── archive/                # Frozen history: v1 spec, shelved v2 PRD, pre-consolidation STATUS.md
 ```
 
-**Sibling repo**: `../gideon/` contains Hermes infrastructure (docker-compose.yml, .env). Plan-state registers itself into Gideon via `register.sh`. The LIVE Gideon config.yaml and data dir are at `$GIDEON_DATA_PATH` (/Users/michaelkerr/gideon-data, mounted at /opt/data) -- `../gideon/data/` is only the nightly backup target (mounted at /opt/data-backup); editing config there does nothing. The running containers are `gideon-gateway` (main agent -- use `docker exec gideon-gateway ...` for in-container commands) and `gideon-dashboard`; "gideon" alone is the compose project name, not a container.
+**Sibling repo**: `../brodie/` contains Hermes infrastructure (docker-compose.yml, .env). Plan-state registers itself into Brodie via `register.sh`. The LIVE Brodie config.yaml and data dir are at `$BRODIE_DATA_PATH` (/Users/michaelkerr/brodie-data, mounted at /opt/data) -- `../brodie/data/` is only the nightly backup target (mounted at /opt/data-backup); editing config there does nothing. The running containers are `brodie-gateway` (main agent -- use `docker exec brodie-gateway ...` for in-container commands) and `brodie-dashboard`; "brodie" alone is the compose project name, not a container.
 
-**Volume mounts**: The entire plan-state repo is volume-mounted into the container at `/opt/plansync/`. Skills are loaded via Hermes `external_dirs` (live edits). MCP server and sync code are accessed directly via the mount (live edits). Scripts are thin wrappers copied by `register.sh` — they delegate to the volume-mounted code, so the actual logic is still live-editable. The MCP server is configured in Gideon's `config.yaml`; `register.sh` handles one-time setup (DB init, pip deps, cron registration) plus script copying.
+**Volume mounts**: The entire plan-state repo is volume-mounted into the container at `/opt/plansync/`. Skills are loaded via Hermes `external_dirs` (live edits). MCP server and sync code are accessed directly via the mount (live edits). Scripts are thin wrappers copied by `register.sh` — they delegate to the volume-mounted code, so the actual logic is still live-editable. The MCP server is configured in Brodie's `config.yaml`; `register.sh` handles one-time setup (DB init, pip deps, cron registration) plus script copying.
 
 ## Conventions
 - Database IDs are 12-char hex strings from `uuid4().hex[:12]`
@@ -98,7 +98,7 @@ plan-state/
 - Do not evaluate weather conditions during planning conversations -- the cron job handles that
 - Do not delete and recreate activities to modify them -- use update_activity
 - Do not add external service dependencies to the automated cron pipeline without asking the user first -- additional external API calls beyond weather need to be evaluated
-- Do not break the volume-mount contract: the entire repo is mounted at /opt/plansync/; skills are loaded via external_dirs, scripts are copied (Hermes blocks symlinks outside /opt/data/scripts/), MCP server config lives in Gideon's config.yaml
+- Do not break the volume-mount contract: the entire repo is mounted at /opt/plansync/; skills are loaded via external_dirs, scripts are copied (Hermes blocks symlinks outside /opt/data/scripts/), MCP server config lives in Brodie's config.yaml
 
 ## Decisions
 - **Hermes Agent, not raw Claude sessions** -- persistent memory, skill system, Telegram integration, cron scheduling all come free
@@ -107,7 +107,7 @@ plan-state/
 - **Deterministic cron, not LLM-in-the-loop** -- weather eval, trigger logic, date cascading are all rule-based. Zero tokens, zero latency, zero external dependency beyond the weather API
 - **Telegram as sole task surface (2026-07-19)** -- Todoist integration removed: ~300 lines + the system's most fragile external dependency (API sunset incident) for a once-daily completion poll. Completions are conversational via complete_activity (immediate, captures notes); the evening nudge replaces due-time reminders
 - **Local LLM for automated tasks** -- zero marginal cost, no external dependency for the morning briefing pipeline. Model is swappable via Hermes config.
-- **Split repos (plan-state + gideon)** -- Hermes infrastructure can be upgraded independently from this capability
+- **Split repos (plan-state + brodie)** -- Hermes infrastructure can be upgraded independently from this capability
 
 ## Decisions (continued)
 - **Per-domain directories (2026-07-22)** -- each domain owns `domains/{slug}/` containing its definition JSON, reference docs, rotation config, and daily dossier. Eliminates cross-domain context bleed when Claude sessions connect only one domain's directory. The dossier exporter writes to `domains/{slug}/dossier.md`; the old `docs/dossiers/` output path is retired

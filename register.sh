@@ -1,9 +1,9 @@
 #!/bin/bash
-# Register plan-state application with a running Gideon instance.
-# Run this after 'docker compose up -d' from the gideon repo.
+# Register plan-state application with a running Brodie instance.
+# Run this after 'docker compose up -d' from the brodie repo.
 #
-# Skills are loaded automatically via external_dirs in Gideon's config.yaml.
-# MCP server is configured in Gideon's config.yaml (mcp_servers.plansync).
+# Skills are loaded automatically via external_dirs in Brodie's config.yaml.
+# MCP server is configured in Brodie's config.yaml (mcp_servers.plansync).
 # Both use the /opt/plansync volume mount — edits are live immediately.
 #
 # WHEN TO RE-RUN:
@@ -19,7 +19,7 @@
 #     is volume-mounted, so changes are live even though the wrapper is copied)
 set -euo pipefail
 
-CONTAINER="${GIDEON_CONTAINER:-gideon-gateway}"
+CONTAINER="${BRODIE_CONTAINER:-brodie-gateway}"
 
 echo "=== Plan-State Registration ==="
 echo "  Container: $CONTAINER"
@@ -28,7 +28,7 @@ echo ""
 # ── 1. Check prerequisites ──────────────────────────────────
 if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER}$"; then
     echo "ERROR: $CONTAINER container is not running."
-    echo "Start Gideon first: cd ../gideon && docker compose up -d"
+    echo "Start Brodie first: cd ../brodie && docker compose up -d"
     exit 1
 fi
 echo "[1/6] Container is running."
@@ -131,11 +131,11 @@ echo "=== Registration Complete ==="
 echo ""
 echo "Skills:     loaded via external_dirs (live edits)"
 echo "Scripts:    copied (re-run register.sh after edits to wrappers)"
-echo "MCP server: configured in Gideon config.yaml (live edits)"
+echo "MCP server: configured in Brodie config.yaml (live edits)"
 echo "Cron jobs:  registered"
 echo ""
 echo "Verify:"
 echo "  docker exec -it $CONTAINER hermes chat -q 'Use the plansync tools to list domains'"
 echo ""
-echo "Required env vars in gideon/.env:"
+echo "Required env vars in brodie/.env:"
 echo "  OPENWEATHERMAP_API_KEY"

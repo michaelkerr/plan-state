@@ -6,7 +6,7 @@ Plan-state is a condition-aware activity orchestrator for personal life domains.
 It stores structured plans in SQLite, evaluates triggers daily against weather
 and calendar conditions, cascades dates through prep/follow-up chains, and
 delivers actionable briefings via Telegram. Deployed as a capability registering
-into a Hermes Agent instance (Gideon) on a Mac Mini.
+into a Hermes Agent instance (Brodie) on a Mac Mini.
 
 v1 shipped 2026-07-21 with three domains (Yard, Garden, Hunting), a consolidated
 engine (shared plansync/engine.py, derived conditions, DB on APFS with WAL), and
@@ -32,9 +32,9 @@ Status: complete
 Notes: ALTER TABLE ADD COLUMN was sufficient (nullable, no CHECK change -- no
 table rebuild). Added idx_activity_log_batch up front since Step 45's undo
 queries "most recent batch". Migration run on the live DB 2026-07-24 via
-`docker exec gideon-gateway` (210 existing entries left NULL). Container name
-gotcha: Docker Desktop shows the compose project "gideon" as a group row; the
-actual containers are gideon-gateway and gideon-dashboard. Regression tests in
+`docker exec brodie-gateway` (210 existing entries left NULL). Container name
+gotcha: Docker Desktop shows the compose project "brodie" as a group row; the
+actual containers are brodie-gateway and brodie-dashboard. Regression tests in
 tests/test_batch_id.py.
 What it does: Adds a batch_id TEXT column to activity_log. All log_change calls within a single tool invocation or sync step share a batch_id (a uuid4 hex). This groups cascaded side effects (e.g. complete_activity logs the activity completion + N step completions + M dependency fires) into one reversible unit for undo.
 What good looks like: log_change accepts an optional batch_id. Callers that produce multiple log entries in one operation pass a shared batch_id. Existing log entries have batch_id NULL (compatible).

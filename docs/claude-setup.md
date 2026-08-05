@@ -12,14 +12,14 @@ constraint, which SQLite enforces from the table's stored DDL — writes with
 `source='claude'` fail until the table is rebuilt. Run once on the Mac Mini:
 
 ```
-docker exec -i gideon-gateway python3 /opt/plansync/scripts/migrate-source-enum.py
+docker exec -i brodie-gateway python3 /opt/plansync/scripts/migrate-source-enum.py
 ```
 
 Idempotent; safe to re-run. New databases created from `schema.sql` don't need it.
 
 ## Claude desktop config
 
-Claude desktop launches the server inside the running Gideon container via
+Claude desktop launches the server inside the running Brodie container via
 `docker exec`. On the Mac Mini itself, add to `claude_desktop_config.json`
 (Settings → Developer → Edit Config):
 
@@ -31,7 +31,7 @@ Claude desktop launches the server inside the running Gideon container via
       "args": [
         "exec", "-i",
         "-e", "PLANSYNC_CLIENT=claude",
-        "gideon-gateway",
+        "brodie-gateway",
         "python3", "/opt/plansync/mcp-server/server.py"
       ]
     }
@@ -51,7 +51,7 @@ the Mac Mini):
         "macmini",
         "docker", "exec", "-i",
         "-e", "PLANSYNC_CLIENT=claude",
-        "gideon-gateway",
+        "brodie-gateway",
         "python3", "/opt/plansync/mcp-server/server.py"
       ]
     }
@@ -69,7 +69,7 @@ wrapper is a small addition.
 2. Make any write from Claude (e.g. `add_observation`), then check attribution:
 
 ```
-docker exec -i gideon-gateway sqlite3 /opt/data/plansync/plansync.db \
+docker exec -i brodie-gateway sqlite3 /opt/data/plansync/plansync.db \
   "SELECT timestamp, item_type, action, source FROM activity_log ORDER BY id DESC LIMIT 5;"
 ```
 
