@@ -262,7 +262,8 @@
         {
           "name": "Water in deeply, mulch 2-3 in",
           "step_type": "follow_up",
-          "lead_days": 0
+          "lead_days": 0,
+          "description": "Mulch the entire 4 ft bed width \u2014 both rows AND the center band between them \u2014 with 2-3 in straw. Clean bare soil in September grows pigweed and crabgrass fast; the center band needs covering too. Leave a small collar cleared around each cabbage transplant, then let the brassicas canopy over by late October."
         }
       ]
     },

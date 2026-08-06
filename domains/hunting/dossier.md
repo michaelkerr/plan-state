@@ -1,6 +1,6 @@
 # Hunting -- plan state
 
-Generated 2026-07-25T11:30:46 by export_dossier.py from the live plansync DB.
+Generated 2026-08-06T07:01:25 by export_dossier.py from the live plansync DB.
 Do not hand-edit: this file is regenerated daily by the 6 AM sync. For live
 queries or changes, use the plansync MCP tools.
 
@@ -10,10 +10,11 @@ queries or changes, use the plansync MCP tools.
 ## In progress (trigger fired)
 - **Submit WMA Quota Hunt Applications** [Licenses & Apps] -- preparing, fired 2026-07-21, target 2026-07-21
   - [ ] Review WMA hunt options and rank 15 choices -- due 2026-07-21 (OVERDUE)
+- **Summer Scouting & Stand Site Selection** [Scouting] -- preparing, fired 2026-08-05, target 2026-08-08
+  - [ ] Map pass on onX/aerials: mark candidate sites and entry routes -- due 2026-08-05 (OVERDUE)
+  - [ ] Confirm parking, access, and wind-based entry for each site -- due 2026-08-10
 
 ## Watching (upcoming)
-- **Summer Scouting & Stand Site Selection** [Scouting] -- est. 2026-08-08 -- calendar 2026-08-08
-- **Kill & Prep Fall Plots** [Food Plots] -- est. 2026-08-10 -- calendar 2026-08-10
 - **Gear Prep & Organization** [Gear] -- est. 2026-08-15 -- calendar 2026-08-15
 - **Leftover Quota Permits On Sale** [Licenses & Apps] -- est. 2026-08-19 -- calendar 2026-08-19
 - **Archery Practice Ramp-Up** [Deer] -- est. 2026-08-20 -- calendar 2026-08-20
@@ -31,24 +32,23 @@ queries or changes, use the plansync MCP tools.
 - **Spring Turkey Opener** [Turkey] -- est. 2027-04-03 -- calendar 2027-04-03
 - **2027 Quota Hunt Applications Open** [Licenses & Apps] -- est. 2027-06-10 -- calendar 2027-06-10
 - **Hang Trail Cameras** [Cameras] -- date TBD -- after "Summer Scouting & Stand Site Selection" completes +3d
-- **Plant Fall Food Plots** [Food Plots] -- date TBD -- after "Kill & Prep Fall Plots" completes +21d
 - **Hang Stands & Blinds** [Stands] -- date TBD -- after "Summer Scouting & Stand Site Selection" completes +10d
 
 ## Completed (last 14 days)
 - none
 
 ## Observations (last 14 days)
-- none
+- 2026-08-01: No plantable ground available for food plots — the one accessible property does not allow planting. Food plot activities (soil test, fertilizer/seed ordering, kill/prep, and planting) skipped for 2026 fall. Keep scouting, stands, and cameras on public WMA ground; skip all plot work until a plantable property is secured.
 
 ## Conditions watch
 - none
 
 ## Recent weather (last 7 days)
-- 2026-07-25: high 86.34, low 74.37, Clouds
-- 2026-07-24: high 70.97, low 70.97, Clouds
-- 2026-07-23: high 82.18, low 74.62, Clouds
-- 2026-07-22: high 88.99, low 73.02, Clouds
-- 2026-07-21: high 93.25, low 81.07, Clouds
-- 2026-07-20: high 90.9, low 79.07, Clouds
-- 2026-07-19: high 89.51, low 73.18, Clouds
-- 2026-07-18: high 89.94, low 73.13, Clouds
+- 2026-08-06: high 88.36, low 71.49, Clouds
+- 2026-08-05: high 74.52, low 74.52, Clouds
+- 2026-08-04: high 75.67, low 75.67, Clear
+- 2026-08-03: high 73.29, low 73.29, Clear
+- 2026-08-02: high 71.29, low 71.29, Clouds
+- 2026-08-01: high 71.44, low 71.44, Clouds
+- 2026-07-31: high 78.3, low 78.3, Clouds
+- 2026-07-30: high 69.62, low 69.62, Clouds

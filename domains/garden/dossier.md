@@ -1,6 +1,6 @@
 # Garden -- plan state
 
-Generated 2026-07-25T11:30:46 by export_dossier.py from the live plansync DB.
+Generated 2026-08-06T07:01:25 by export_dossier.py from the live plansync DB.
 Do not hand-edit: this file is regenerated daily by the 6 AM sync. For live
 queries or changes, use the plansync MCP tools.
 
@@ -21,21 +21,11 @@ queries or changes, use the plansync MCP tools.
 | N3 | Roots & chenopods |
 
 ## In progress (trigger fired)
-- **Order Fall & Winter Supplies** -- preparing, fired 2026-07-15, target 2026-07-15
-  - [ ] Certified seed garlic (2 lb, hardneck+softneck) -- due 2026-07-15 (OVERDUE)
-  - [ ] Cowpea inoculant (Bradyrhizobium, cowpea/peanut group) -- due 2026-07-15 (OVERDUE)
-  - [ ] Pinkeye Purple Hull pea seed (bush type) -- due 2026-07-15 (OVERDUE)
-  - [ ] Watermelon radish (Beauty Heart) + Hakurei turnip seed -- due 2026-07-15 (OVERDUE)
-  - [ ] Mache / corn salad seed (Vit) -- due 2026-07-15 (OVERDUE)
-  - [ ] Spinach (Bloomsdale Long Standing) + romaine lettuce seed -- due 2026-07-15 (OVERDUE)
-- **Sow Cabbage Indoors** [N2] -- preparing, fired 2026-07-16, target 2026-07-17
-  - [ ] Prepare cells with clean seed-starting mix -- due 2026-07-16 (OVERDUE)
-  - [ ] Sow 1/4 in deep, germinate at 75F -- due 2026-07-17 (OVERDUE)
-  - [ ] Move seedlings to 60-65F under light after emergence -- due 2026-07-24 (OVERDUE)
+- **Transplant Fall Brassicas into N2** [N2] -- preparing, fired 2026-07-26, target 2026-09-06
+  - [ ] Harden off seedlings 5-7 days (shade -> sun) -- due 2026-08-30
+  - [ ] Water in deeply, mulch 2-3 in -- due 2026-09-06
 
 ## Watching (upcoming)
-- **Direct-Seed Collards in N2** [N2] -- est. 2026-08-01 -- calendar 2026-08-01
-- **Remove Plum/Peach Tree (dormant)** -- est. 2026-08-01 -- calendar 2026-08-01
 - **Pull Tomatoes from S3 & N3 + Verticillium Check** [S3+N3] -- est. 2026-08-15 -- calendar 2026-08-15
 - **Merge Beds 2 & 3 into 36 ft North Bed** [North bed] -- est. 2026-08-15 -- calendar 2026-08-15
 - **Clear N1 as Pattypan Finishes** [N1] -- est. 2026-09-01 -- calendar 2026-09-01
@@ -76,34 +66,30 @@ queries or changes, use the plansync MCP tools.
 - **Strawberry Final Pull (Year 3)** [S1] -- est. 2029-06-10 -- calendar 2029-06-10
 - **Order Strawberry Plugs** [N1] -- est. 2029-07-15 -- calendar 2029-07-15
 - **Strawberry Plugs In** [N1] -- est. 2029-09-20 -- calendar 2029-09-20
-- **Transplant Fall Brassicas into N2** [N2] -- date TBD -- after "Sow Cabbage Indoors" completes +42d
 - **Garlic In - S2 (rows 1 & 3)** [S2] -- date TBD -- after "Cut Pea Vines in S2" completes +14d
 - **Move Blueberries (dormant)** [Blueberry] -- date TBD -- after "Build Blueberry Bed" completes +14d
 - **Fall Brassica Transplants Out** [S1] -- date TBD -- after "Seed Fall Brassicas Indoors" completes +42d
 
 ## Completed (last 14 days)
-- Plant Southern Peas in S2 -- 2026-07-22
-- Check / Renovate Strawberries in S1 -- 2026-07-21
-- Pot Up Olive Tree -- 2026-07-21
-- Dig Potatoes & Dismantle Towers -- 2026-07-19
-- Cut Potato Tops (S1 & N1) -- 2026-07-19
+- Direct-Seed Collards in N2 -- 2026-08-01
+- Remove Plum/Peach Tree (dormant) -- 2026-07-29
+- Order Fall & Winter Supplies -- 2026-07-26
+- Sow Cabbage Indoors -- 2026-07-26
 
 ## Observations (last 14 days)
-- 2026-07-22: Sow Cabbage Indoors (N2): cells prepared with clean seed-starting mix (7/16), seeds sown 1/4" deep at 75F (7/17) — 3 Flat Dutch + 4 Red Acre. Follow-up: move to 60-65F under light after emergence (due 7/24).
-- 2026-07-22: Certified seed garlic (2 lb, hardneck+softneck) ordered. Pinkeye Purple Hull pea seed (bush type) ordered.
-- 2026-07-22: Certified seed garlic (2 lb, hardneck+softneck) purchased — Music/German Extra Hardy (hardneck) + Inchelium Red (softneck)
-- 2026-07-21: Cowpea inoculant (Bradyrhizobium, cowpea/peanut group) ordered and received. Pinkeye Purple Hull pea seed (bush type) ordered.
+- 2026-07-26: Cabbage seeds (Flat Dutch + Red Acre) have germinated. Sown 7/26 indoors at 75F, emergence observed.
+- 2026-07-26: Southern peas (Pinkeye Purple Hull) in S2 have started germinating. Planted 7/22, emergence observed ~4 days after sowing.
 
 ## Conditions watch
-- Move Olive Indoors for Winter: daily_low <= 35 -- not met, currently 74.37
-- Move Olive Back Outside: daily_low >= 40 x3d -- MET, currently 74.37
+- Move Olive Indoors for Winter: daily_low <= 35 -- not met, currently 71.49
+- Move Olive Back Outside: daily_low >= 40 x3d -- MET, currently 71.49
 
 ## Recent weather (last 7 days)
-- 2026-07-25: high 86.34, low 74.37, Clouds
-- 2026-07-24: high 70.97, low 70.97, Clouds
-- 2026-07-23: high 82.18, low 74.62, Clouds
-- 2026-07-22: high 88.99, low 73.02, Clouds
-- 2026-07-21: high 93.25, low 81.07, Clouds
-- 2026-07-20: high 90.9, low 79.07, Clouds
-- 2026-07-19: high 89.51, low 73.18, Clouds
-- 2026-07-18: high 89.94, low 73.13, Clouds
+- 2026-08-06: high 88.36, low 71.49, Clouds
+- 2026-08-05: high 74.52, low 74.52, Clouds
+- 2026-08-04: high 75.67, low 75.67, Clear
+- 2026-08-03: high 73.29, low 73.29, Clear
+- 2026-08-02: high 71.29, low 71.29, Clouds
+- 2026-08-01: high 71.44, low 71.44, Clouds
+- 2026-07-31: high 78.3, low 78.3, Clouds
+- 2026-07-30: high 69.62, low 69.62, Clouds

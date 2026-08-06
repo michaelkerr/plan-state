@@ -84,7 +84,7 @@
     },
     {
       "name": "Kill & Prep Fall Plots",
-      "description": "Spray existing vegetation on the private-ground plots; lime and fertilize per soil test. Prep now so plots can be planted on a rain in the Sep window.",
+      "description": "SKIPPED: No planting allowed on the one property available. Soil test, fertilizer, and seed ordering for food plots are moot without plantable ground.",
       "group_name": "Food Plots",
       "trigger_type": "calendar",
       "trigger_def": {
@@ -107,7 +107,7 @@
     },
     {
       "name": "Plant Fall Food Plots",
-      "description": "Late Aug to mid-Sep window here -- plant just ahead of a forecast rain. Cultipack or drag for seed contact.",
+      "description": "SKIPPED: No planting allowed on the one property available. Dependent on the skipped prep activity.",
       "group_name": "Food Plots",
       "trigger_type": "dependency",
       "trigger_def": {

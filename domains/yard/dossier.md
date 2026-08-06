@@ -1,6 +1,6 @@
 # Yard -- plan state
 
-Generated 2026-07-25T11:30:46 by export_dossier.py from the live plansync DB.
+Generated 2026-08-06T07:01:25 by export_dossier.py from the live plansync DB.
 Do not hand-edit: this file is regenerated daily by the 6 AM sync. For live
 queries or changes, use the plansync MCP tools.
 
@@ -9,7 +9,6 @@ queries or changes, use the plansync MCP tools.
 
 ## In progress (trigger fired)
 - **Spot-Spray Dallisgrass & Johnsongrass** [Weeds] -- preparing, fired 2026-07-17, target 2026-07-20
-  - [ ] Flag sprayed spots for September reseed -- due 2026-07-21 (OVERDUE)
 - **Summer Fungicide Watch** [Pests & Disease] -- active, fired 2026-07-03, target 2026-07-03
 
 ## Watching (upcoming)
@@ -25,25 +24,24 @@ queries or changes, use the plansync MCP tools.
 - **Spring Pre-Emergent App 2** [Weeds] -- date TBD -- after "Spring Pre-Emergent App 1" completes +60d
 
 ## Completed (last 14 days)
-- UT Soil Test -- 2026-07-22
-- Confirm Water Utility & Irrigation Schedule -- 2026-07-13
+- none
 
 ## Observations (last 14 days)
-- 2026-07-20: Step 27 verification: source-attribution test write from Claude desktop MCP registration. Safe to ignore.
+- none
 
 ## Conditions watch
-- Aerate, Overseed & Compost Topdress: daily_high <= 85 x3d -- not met, currently 86.34
-- Fall Nitrogen #2: daily_low <= 32 -- not met, currently 74.37
-- Winter Broadleaf Spray: daily_high >= 50 -- MET, currently 86.34
-- Late-Winter Broadleaf Spray: daily_high >= 50 -- MET, currently 86.34
-- Spring Pre-Emergent App 1: daily_high >= 55 x3d -- MET, currently 86.34
+- Aerate, Overseed & Compost Topdress: daily_high <= 85 x3d -- not met, currently 88.36
+- Fall Nitrogen #2: daily_low <= 32 -- not met, currently 71.49
+- Winter Broadleaf Spray: daily_high >= 50 -- MET, currently 88.36
+- Late-Winter Broadleaf Spray: daily_high >= 50 -- MET, currently 88.36
+- Spring Pre-Emergent App 1: daily_high >= 55 x3d -- MET, currently 88.36
 
 ## Recent weather (last 7 days)
-- 2026-07-25: high 86.34, low 74.37, Clouds
-- 2026-07-24: high 70.97, low 70.97, Clouds
-- 2026-07-23: high 82.18, low 74.62, Clouds
-- 2026-07-22: high 88.99, low 73.02, Clouds
-- 2026-07-21: high 93.25, low 81.07, Clouds
-- 2026-07-20: high 90.9, low 79.07, Clouds
-- 2026-07-19: high 89.51, low 73.18, Clouds
-- 2026-07-18: high 89.94, low 73.13, Clouds
+- 2026-08-06: high 88.36, low 71.49, Clouds
+- 2026-08-05: high 74.52, low 74.52, Clouds
+- 2026-08-04: high 75.67, low 75.67, Clear
+- 2026-08-03: high 73.29, low 73.29, Clear
+- 2026-08-02: high 71.29, low 71.29, Clouds
+- 2026-08-01: high 71.44, low 71.44, Clouds
+- 2026-07-31: high 78.3, low 78.3, Clouds
+- 2026-07-30: high 69.62, low 69.62, Clouds
