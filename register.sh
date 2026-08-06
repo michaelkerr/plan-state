@@ -42,6 +42,14 @@ for skill in plansync.md plansync-briefing.md domain-authoring.md; do
         echo "  Removed old skill copy: $skill"
     fi
 done
+# Hermes auto-categorizes skills into subdirs (e.g. productivity/plansync-briefing);
+# these collide with external_dirs versions causing "Ambiguous skill name" errors
+for skill_dir in plansync-briefing; do
+    if docker exec "$CONTAINER" test -d "/opt/data/skills/productivity/$skill_dir" 2>/dev/null; then
+        docker exec "$CONTAINER" rm -rf "/opt/data/skills/productivity/$skill_dir"
+        echo "  Removed categorized skill dir: productivity/$skill_dir"
+    fi
+done
 for script in sync.py briefing-context.py briefing-context.sh evening-nudge.py; do
     target="/opt/data/scripts/$script"
     if docker exec "$CONTAINER" test -L "$target" 2>/dev/null; then
