@@ -86,6 +86,10 @@ condition-type leaves of trigger_def -- never author them directly.
   step ("thinned the cabbage seedlings"), call update_step with
   status="completed". Look in get_domain_plan or get_upcoming to
   find the matching step_id.
+- **Verify every completion.** After calling complete_activity or
+  update_step(status="completed"), immediately call get_domain_plan
+  to confirm the status actually changed. If it did not, tell the
+  user the completion failed. Never report success without verifying.
 - Dates cascade automatically when you defer or update trigger_dates.
 - If the user asks "what's coming up," call get_upcoming() rather
   than trying to reconstruct the schedule from memory.

@@ -1,6 +1,6 @@
 # Garden -- plan state
 
-Generated 2026-08-06T12:00:16 by export_dossier.py from the live plansync DB.
+Generated 2026-08-07T15:00:37 by export_dossier.py from the live plansync DB.
 Do not hand-edit: this file is regenerated daily by the 6 AM sync. For live
 queries or changes, use the plansync MCP tools.
 
@@ -81,15 +81,15 @@ queries or changes, use the plansync MCP tools.
 - 2026-07-26: Southern peas (Pinkeye Purple Hull) in S2 have started germinating. Planted 7/22, emergence observed ~4 days after sowing.
 
 ## Conditions watch
-- Move Olive Indoors for Winter: daily_low <= 35 -- not met, currently 77.23
-- Move Olive Back Outside: daily_low >= 40 x3d -- MET, currently 77.23
+- Move Olive Indoors for Winter: daily_low <= 35 -- not met, currently 73.54
+- Move Olive Back Outside: daily_low >= 40 x3d -- MET, currently 73.54
 
 ## Recent weather (last 7 days)
-- 2026-08-06: high 87.12, low 77.23, Clear
+- 2026-08-07: high 88.03, low 73.54, Rain, precip 0.0700786"
+- 2026-08-06: high 75.61, low 75.61, Clouds
 - 2026-08-05: high 74.52, low 74.52, Clouds
 - 2026-08-04: high 75.67, low 75.67, Clear
 - 2026-08-03: high 73.29, low 73.29, Clear
 - 2026-08-02: high 71.29, low 71.29, Clouds
 - 2026-08-01: high 71.44, low 71.44, Clouds
 - 2026-07-31: high 78.3, low 78.3, Clouds
-- 2026-07-30: high 69.62, low 69.62, Clouds
