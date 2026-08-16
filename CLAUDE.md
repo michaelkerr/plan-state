@@ -44,7 +44,7 @@ plan-state/
 │   ├── sync_pipeline.py        # Deterministic sync pipeline (weather, conditions, triggers, cascade, overdue); hourly
 │   ├── evening_nudge.py        # Evening "still open today" reminder (silent when clear)
 │   ├── briefing_context.py     # Morning briefing context (sync output, 24h fires, due/week via views)
-│   ├── export_dossier.py       # Per-domain markdown state files → domains/{slug}/dossier.md (generated)
+│   ├── export_dossier.py       # Per-domain markdown state files → domains/{slug}/dossier.md (generated, gitignored)
 │   └── requirements.txt        # requests
 ├── scripts/                    # Cron wrappers (copied to Hermes data dir by register.sh) + one-time migrations
 │   ├── sync.py                 # Delegates to sync/sync_pipeline.py, then sync/export_dossier.py
@@ -59,9 +59,9 @@ plan-state/
 ├── claude-skills/              # Claude-side skills, symlinked into ~/.claude/skills/
 │   └── plansync-domain-authoring/SKILL.md   # Thin wrapper: frontmatter + pointer to skills/domain-authoring.md (no duplicated rules)
 ├── domains/                    # Per-domain directories: definition, reference docs, dossier
-│   ├── garden/                 # rotation.json, reference.md, garden.json, dossier.md (generated)
-│   ├── yard/                   # yard.json, dossier.md (generated)
-│   └── hunting/                # dossier.md (generated)
+│   ├── garden/                 # rotation.json, reference.md, garden.json, dossier.md (generated, gitignored)
+│   ├── yard/                   # yard.json, dossier.md (generated, gitignored)
+│   └── hunting/                # dossier.md (generated, gitignored)
 ├── sync-output/                # Daily JSON summaries (runtime, gitignored)
 └── docs/
     ├── claude-setup.md         # Claude desktop MCP registration + verification

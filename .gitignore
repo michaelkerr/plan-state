@@ -17,8 +17,10 @@
 # Sync output (runtime)
 sync-output/*.json
 
-# Dossiers (generated daily by export_dossier.py, never hand-edited)
+# Dossiers (generated daily by export_dossier.py, never hand-edited).
+# docs/dossiers/ is the retired output path; current path is per-domain.
 docs/dossiers/
+domains/*/dossier.md
 
 # Python
 __pycache__/

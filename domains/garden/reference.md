@@ -7,7 +7,7 @@ the rotation is redesigned, not when something is planted or harvested.
 
 **Current operational state** (what's planted, what's due, section assignments,
 rotation position) lives in the plansync DB and is exported daily to the
-dossier at `docs/dossiers/garden.md`. If this document and the dossier
+dossier at `domains/garden/dossier.md`. If this document and the dossier
 disagree on operational facts, the dossier is correct.
 
 Supersedes succession-system v1--v3.
