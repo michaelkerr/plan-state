@@ -1,6 +1,6 @@
 # Hunting -- plan state
 
-Generated 2026-08-07T15:00:37 by export_dossier.py from the live plansync DB.
+Generated 2026-08-15T19:00:55 by export_dossier.py from the live plansync DB.
 Do not hand-edit: this file is regenerated daily by the 6 AM sync. For live
 queries or changes, use the plansync MCP tools.
 
@@ -10,10 +10,11 @@ queries or changes, use the plansync MCP tools.
 ## In progress (trigger fired)
 - **Summer Scouting & Stand Site Selection** [Scouting] -- preparing, fired 2026-08-05, target 2026-08-08
   - [ ] Map pass on onX/aerials: mark candidate sites and entry routes -- due 2026-08-05 (OVERDUE)
-  - [ ] Confirm parking, access, and wind-based entry for each site -- due 2026-08-10
+- **Gear Prep & Organization** [Gear] -- preparing, fired 2026-08-12, target 2026-08-15
+  - [ ] Inventory pass: clothing, boots, calls, ammo, batteries, licenses in wallet/app -- due 2026-08-12 (OVERDUE)
+  - [ ] Buy replacements for anything worn out or missing -- due 2026-08-18
 
 ## Watching (upcoming)
-- **Gear Prep & Organization** [Gear] -- est. 2026-08-15 -- calendar 2026-08-15
 - **Leftover Quota Permits On Sale** [Licenses & Apps] -- est. 2026-08-19 -- calendar 2026-08-19
 - **Archery Practice Ramp-Up** [Deer] -- est. 2026-08-20 -- calendar 2026-08-20
 - **Dove Opener** [Dove] -- est. 2026-09-01 -- calendar 2026-09-01
@@ -36,17 +37,16 @@ queries or changes, use the plansync MCP tools.
 - Submit WMA Quota Hunt Applications -- 2026-08-07
 
 ## Observations (last 14 days)
-- 2026-08-01: No plantable ground available for food plots — the one accessible property does not allow planting. Food plot activities (soil test, fertilizer/seed ordering, kill/prep, and planting) skipped for 2026 fall. Keep scouting, stands, and cameras on public WMA ground; skip all plot work until a plantable property is secured.
+- none
 
 ## Conditions watch
 - none
 
 ## Recent weather (last 7 days)
-- 2026-08-07: high 88.03, low 73.54, Rain, precip 0.0700786"
-- 2026-08-06: high 75.61, low 75.61, Clouds
-- 2026-08-05: high 74.52, low 74.52, Clouds
-- 2026-08-04: high 75.67, low 75.67, Clear
-- 2026-08-03: high 73.29, low 73.29, Clear
-- 2026-08-02: high 71.29, low 71.29, Clouds
-- 2026-08-01: high 71.44, low 71.44, Clouds
-- 2026-07-31: high 78.3, low 78.3, Clouds
+- 2026-08-15: high 90.27, low 82.63, Clouds
+- 2026-08-14: high 79.43, low 79.43, Clear
+- 2026-08-13: high 79.05, low 79.05, Clouds
+- 2026-08-12: high 81.57, low 81.57, Clouds
+- 2026-08-11: high 79.12, low 79.12, Clouds
+- 2026-08-10: high 80.33, low 80.33, Clear
+- 2026-08-09: high 78.22, low 78.22, Clouds

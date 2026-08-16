@@ -1,6 +1,6 @@
 # Garden -- plan state
 
-Generated 2026-08-07T15:00:37 by export_dossier.py from the live plansync DB.
+Generated 2026-08-15T19:00:55 by export_dossier.py from the live plansync DB.
 Do not hand-edit: this file is regenerated daily by the 6 AM sync. For live
 queries or changes, use the plansync MCP tools.
 
@@ -21,13 +21,14 @@ queries or changes, use the plansync MCP tools.
 | N3 | Roots & chenopods |
 
 ## In progress (trigger fired)
+- **Pull Tomatoes from S3 & N3 + Verticillium Check** [S3+N3] -- preparing, fired 2026-08-15, target 2026-08-15
+  - [ ] Remove & bag ALL Solanaceae debris (leaves, fruit, root stubs) -- due 2026-08-15
+  - [ ] Hold jalapeños in place; move to pots ~Sept 15 -- due 2026-08-15
 - **Transplant Fall Brassicas into N2** [N2] -- preparing, fired 2026-07-26, target 2026-09-06
   - [ ] Harden off seedlings 5-7 days (shade -> sun) -- due 2026-08-30
   - [ ] Water in deeply, mulch 2-3 in -- due 2026-09-06
 
 ## Watching (upcoming)
-- **Pull Tomatoes from S3 & N3 + Verticillium Check** [S3+N3] -- est. 2026-08-15 -- calendar 2026-08-15
-- **Merge Beds 2 & 3 into 36 ft North Bed** [North bed] -- est. 2026-08-15 -- calendar 2026-08-15
 - **Clear N1 as Pattypan Finishes** [N1] -- est. 2026-09-01 -- calendar 2026-09-01
 - **Harvest Southern Peas in S2** [S2] -- est. 2026-09-15 -- calendar 2026-09-15
 - **Sow Watermelon Radish + Hakurei Turnips in N1** [N1] -- est. 2026-09-15 -- calendar 2026-09-15
@@ -71,25 +72,20 @@ queries or changes, use the plansync MCP tools.
 - **Fall Brassica Transplants Out** [S1] -- date TBD -- after "Seed Fall Brassicas Indoors" completes +42d
 
 ## Completed (last 14 days)
-- Direct-Seed Collards in N2 -- 2026-08-01
-- Remove Plum/Peach Tree (dormant) -- 2026-07-29
-- Order Fall & Winter Supplies -- 2026-07-26
-- Sow Cabbage Indoors -- 2026-07-26
+- Merge Beds 2 & 3 into 36 ft North Bed -- 2026-08-08
 
 ## Observations (last 14 days)
-- 2026-07-26: Cabbage seeds (Flat Dutch + Red Acre) have germinated. Sown 7/26 indoors at 75F, emergence observed.
-- 2026-07-26: Southern peas (Pinkeye Purple Hull) in S2 have started germinating. Planted 7/22, emergence observed ~4 days after sowing.
+- 2026-08-15: Aug 15 2026: Pulled all tomatoes from N3 and S3. Verticillium stem-slice check performed — all clear, no vascular browning on any plant. Jalapeños left in place in both beds (still producing well); will hold until closer to Sept 15 planting window before relocating to pots.
 
 ## Conditions watch
-- Move Olive Indoors for Winter: daily_low <= 35 -- not met, currently 73.54
-- Move Olive Back Outside: daily_low >= 40 x3d -- MET, currently 73.54
+- Move Olive Indoors for Winter: daily_low <= 35 -- not met, currently 82.63
+- Move Olive Back Outside: daily_low >= 40 x3d -- MET, currently 82.63
 
 ## Recent weather (last 7 days)
-- 2026-08-07: high 88.03, low 73.54, Rain, precip 0.0700786"
-- 2026-08-06: high 75.61, low 75.61, Clouds
-- 2026-08-05: high 74.52, low 74.52, Clouds
-- 2026-08-04: high 75.67, low 75.67, Clear
-- 2026-08-03: high 73.29, low 73.29, Clear
-- 2026-08-02: high 71.29, low 71.29, Clouds
-- 2026-08-01: high 71.44, low 71.44, Clouds
-- 2026-07-31: high 78.3, low 78.3, Clouds
+- 2026-08-15: high 90.27, low 82.63, Clouds
+- 2026-08-14: high 79.43, low 79.43, Clear
+- 2026-08-13: high 79.05, low 79.05, Clouds
+- 2026-08-12: high 81.57, low 81.57, Clouds
+- 2026-08-11: high 79.12, low 79.12, Clouds
+- 2026-08-10: high 80.33, low 80.33, Clear
+- 2026-08-09: high 78.22, low 78.22, Clouds

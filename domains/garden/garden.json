@@ -227,7 +227,7 @@
           "name": "Slice each main stem near base - log vascular browning",
           "step_type": "prep",
           "lead_days": 0,
-          "description": "Browning in outer ring = Verticillium. 30 sec/plant."
+          "description": "Slice each main stem near base - log vascular browning. DONE Aug 15 2026: All tomato stems checked, no vascular browning \u2014 Verticillium clear."
         },
         {
           "name": "Remove & bag ALL Solanaceae debris (leaves, fruit, root stubs)",
@@ -235,9 +235,10 @@
           "lead_days": 0
         },
         {
-          "name": "Move best 2-3 jalapenos to 5-gal pots near patio; pull the rest",
+          "name": "Hold jalape\u00f1os in place; move to pots ~Sept 15",
           "step_type": "follow_up",
-          "lead_days": 0
+          "lead_days": 0,
+          "description": "Jalape\u00f1os still producing well in S3/N3 \u2014 leaving in place. Relocate best 2-3 to 5-gal pots near patio closer to Sept 15 (when fall planting goes into these beds). Pull the rest at that same time."
         }
       ]
     },
