@@ -6,27 +6,27 @@ Plan-state is a **capability** that registers into a running [Hermes Agent](http
 
 ## How it works
 
-1. **Plan**: Talk to Brodie (Hermes) via Telegram. Describe what you want to manage -- "help me plan my fall garden succession for Zone 7a." The LLM generates a structured domain plan and writes it to the plan store via MCP tools.
+1. **Plan**: Talk to Reach (Hermes) via Telegram. Describe what you want to manage -- "help me plan my fall garden succession for Zone 7a." The LLM generates a structured domain plan and writes it to the plan store via MCP tools.
 
 2. **Monitor**: Every morning at 6 AM, a deterministic cron job (zero LLM tokens) pulls weather, evaluates trigger conditions against current data, fires triggers when conditions are met, and cascades dates through prep/follow-up chains.
 
 3. **Brief**: At 6:15 AM, an LLM-backed cron job generates a concise morning briefing from the sync results and delivers it to Telegram. At 5 PM, a deterministic evening nudge lists anything still open today (silent when nothing is due).
 
-4. **Act**: Work from the briefing. When you finish something, tell Brodie ("done with the fungicide") -- it marks the activity complete and cascades follow-ups immediately.
+4. **Act**: Work from the briefing. When you finish something, tell Reach ("done with the fungicide") -- it marks the activity complete and cascades follow-ups immediately.
 
-5. **Adapt**: When something changes, message Brodie. The LLM updates the plan store, and the next cron run re-cascades everything.
+5. **Adapt**: When something changes, message Reach. The LLM updates the plan store, and the next cron run re-cascades everything.
 
 ## Prerequisites
 
-- A running Hermes Agent instance (the sibling `brodie/` repo handles this)
+- A running Hermes Agent instance (the sibling `reach/` repo handles this)
 - Docker
-- API keys: `OPENWEATHERMAP_API_KEY` (set in `brodie/.env`)
+- API keys: `OPENWEATHERMAP_API_KEY` (set in `reach/.env`)
 
 ## Setup
 
 ```bash
 # 1. Start the Hermes infrastructure
-cd ../brodie
+cd ../reach
 docker compose up -d
 
 # 2. Register plan-state into the running instance
@@ -36,9 +36,9 @@ cd ../plan-state
 
 `register.sh` copies scripts, initializes the database, installs Python dependencies, and registers cron jobs. The entire repo is volume-mounted into the container at `/opt/plansync/`:
 
-- **Skills**: loaded via Hermes `external_dirs` (configured in Brodie's `config.yaml`) — live edits
+- **Skills**: loaded via Hermes `external_dirs` (configured in Reach's `config.yaml`) — live edits
 - **Scripts**: thin wrappers copied into `/opt/data/scripts/` (Hermes requires scripts within this directory). They delegate to volume-mounted code, so the actual logic is live-editable.
-- **MCP server**: configured in Brodie's `config.yaml` (`mcp_servers.plansync`) — live edits
+- **MCP server**: configured in Reach's `config.yaml` (`mcp_servers.plansync`) — live edits
 - **Sync pipeline, schema, init**: accessed directly via the volume mount — live edits
 
 Re-run `register.sh` after adding new script files, editing script wrappers, or adding new cron jobs.
@@ -46,7 +46,7 @@ Re-run `register.sh` after adding new script files, editing script wrappers, or 
 ## Verify
 
 ```bash
-docker exec -it brodie-gateway hermes chat -q 'Use the plansync tools to list domains'
+docker exec -it reach-gateway hermes chat -q 'Use the plansync tools to list domains'
 ```
 
 ## What's built
@@ -71,7 +71,7 @@ See [BUILD_PLAN.md](BUILD_PLAN.md) for current status and next steps.
 
 **Why SQLite?** Single-user system on a home server. No need for a database server process.
 
-**Why split repos?** Hermes infrastructure (`brodie/`) can be upgraded, reconfigured, or redeployed independently from this capability. Plan-state registers itself and doesn't care how Hermes is hosted.
+**Why split repos?** Hermes infrastructure (`reach/`) can be upgraded, reconfigured, or redeployed independently from this capability. Plan-state registers itself and doesn't care how Hermes is hosted.
 
 ## Architecture
 
