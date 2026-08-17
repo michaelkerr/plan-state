@@ -116,12 +116,13 @@ def render_domain(conn, domain):
         add(f"**Notes:** {domain['notes']}")
     add("")
 
-    # Reference doc pointer (if a rotation config names one)
+    # Reference doc pointer (if a rotation config names one). The path is
+    # relative to the domain's own directory (e.g. "reference.md").
     rotation = load_rotation(slug)
     if rotation:
         ref = rotation.get("reference_doc")
         if ref:
-            ref_abs = os.path.join(PLANSYNC_ROOT, ref)
+            ref_abs = os.path.join(DOMAINS_DIR, slug, os.path.basename(ref))
             if os.path.exists(ref_abs):
                 add(f"**Reference:** `{ref}` -- rotation design, variety guidance, planting rules")
                 add("")
