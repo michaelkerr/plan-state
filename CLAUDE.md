@@ -3,7 +3,9 @@
 # Plan-State
 
 ## What this is
-A condition-aware activity orchestrator for personal life domains (lawn care, gardening, hunting, health, home maintenance). It turns LLM-generated domain plans into managed, condition-aware tasks that re-cascade automatically when things slip, complete, or change. Deployed as a capability that registers into a running Hermes Agent instance (branded "Reach") on a Mac Mini home server. Telegram is the sole task surface: an hourly cron pipeline (zero LLM tokens, local delivery) pulls weather, evaluates triggers, and cascades dates; an LLM morning briefing at 6:15 reads the 6:00 run's output, and a deterministic evening nudge at 5 PM lists anything still open (silent on clear days). Completions are conversational -- the user tells Reach (Telegram) or Claude, which calls complete_activity. Hermes and Claude are peer agents of the same engine: both use the same MCP server and authoring skill, with writes distinguished by source attribution (docs/claude-setup.md covers the Claude side). Per-domain dossier files (domains/{slug}/dossier.md, regenerated daily) orient sessions without MCP access.
+A condition-aware activity orchestrator for personal life domains (lawn care, gardening, hunting, health, home maintenance). It turns LLM-generated domain plans into managed, condition-aware tasks that re-cascade automatically when things slip, complete, or change. Deployed as a capability that registers into a running Hermes Agent instance (branded "Reach") on a Mac Mini home server. Telegram is the sole task surface: an hourly cron pipeline (zero LLM tokens, local delivery) pulls weather, evaluates triggers, and cascades dates; an LLM morning briefing at 6:15 reads the 6:00 run's output, and a deterministic evening nudge at 5 PM lists anything still open (silent on clear days). Completions are conversational -- the user tells Reach (Telegram) or Claude, which calls complete_activity. Hermes and Claude are peer agents of the same engine: both use the same MCP server and authoring skill, with writes distinguished by source attribution (docs/claude-setup.md covers the Claude side). Per-domain dossier files (`/opt/data/plansync/domains/{slug}/dossier.md`, regenerated daily) orient sessions without MCP access.
+
+**Repo = code, reach-data = state.** This repo contains only source: engine, MCP server, sync pipeline, skills, schema, tests, examples. All data — the DB, domain definitions, dossiers, reference docs, rotation configs, sync output — lives under `/opt/data/plansync/` (host: `$REACH_DATA_PATH/plansync/`, backed up nightly). Never commit domain data or runtime output to this repo.
 
 ## Build protocol
 - The build plan lives in BUILD_PLAN.md. Read it at the start of every session.
@@ -44,7 +46,8 @@ plan-state/
 │   ├── sync_pipeline.py        # Deterministic sync pipeline (weather, conditions, triggers, cascade, overdue); hourly
 │   ├── evening_nudge.py        # Evening "still open today" reminder (silent when clear)
 │   ├── briefing_context.py     # Morning briefing context (sync output, 24h fires, due/week via views)
-│   ├── export_dossier.py       # Per-domain markdown state files → domains/{slug}/dossier.md (generated, gitignored)
+│   ├── export_dossier.py       # Per-domain markdown state files → /opt/data/plansync/domains/{slug}/dossier.md
+│   ├── export_domain_json.py   # DB → clean re-importable {slug}.json seed, same directory
 │   └── requirements.txt        # requests
 ├── scripts/                    # Cron wrappers (copied to Hermes data dir by register.sh) + one-time migrations
 │   ├── sync.py                 # Delegates to sync/sync_pipeline.py, then sync/export_dossier.py
@@ -58,11 +61,6 @@ plan-state/
 │   └── domain-authoring.md     # Guides LLM through domain planning conversation → load_domain (canonical, shared with Claude)
 ├── claude-skills/              # Claude-side skills, symlinked into ~/.claude/skills/
 │   └── plansync-domain-authoring/SKILL.md   # Thin wrapper: frontmatter + pointer to skills/domain-authoring.md (no duplicated rules)
-├── domains/                    # Per-domain directories: definition, reference docs, dossier
-│   ├── garden/                 # rotation.json, reference.md, garden.json, dossier.md (generated, gitignored)
-│   ├── yard/                   # yard.json, dossier.md (generated, gitignored)
-│   └── hunting/                # dossier.md (generated, gitignored)
-├── sync-output/                # Daily JSON summaries (runtime, gitignored)
 └── docs/
     ├── claude-setup.md         # Claude desktop MCP registration + verification
     └── archive/                # Frozen history: v1 spec, shelved v2 PRD, pre-consolidation STATUS.md
@@ -110,7 +108,8 @@ plan-state/
 - **Split repos (plan-state + reach)** -- Hermes infrastructure can be upgraded independently from this capability
 
 ## Decisions (continued)
-- **Per-domain directories (2026-07-22)** -- each domain owns `domains/{slug}/` containing its definition JSON, reference docs, rotation config, and daily dossier. Eliminates cross-domain context bleed when Claude sessions connect only one domain's directory. The dossier exporter writes to `domains/{slug}/dossier.md`; the old `docs/dossiers/` output path is retired
+- **Per-domain directories (2026-07-22)** -- each domain owns a `domains/{slug}/` directory containing its definition JSON, reference docs, rotation config, and daily dossier. Eliminates cross-domain context bleed when Claude sessions connect only one domain's directory
+- **Domain data moved out of the repo (2026-08-17)** -- `domains/` and `sync-output/` relocated to `/opt/data/plansync/` (host: `$REACH_DATA_PATH/plansync/`). The repo working tree was doubling as the runtime data directory: cron exporters wrote generated files back into it, and hand-authored domain configs (rotation.json, reference.md) were versioned alongside system code. Now the repo is pure code; data lives with the DB in reach-data, covered by the nightly backup. `PLANSYNC_DOMAINS_DIR`/`PLANSYNC_OUTPUT_DIR` env vars still override for tests
 - **v2: plan-management-first architecture (2026-07-24)** -- v1 was built trigger-first (trigger_def is the most complex structure, trigger evaluation the most complex code). v2 inverts this: the plan hierarchy (domain/activity/step) is the foundation with simple CRUD, triggers are optional enrichment, step visibility is independent of parent activity status, and all state changes route through explicit transition tables with a cascade reactor. Rationale and full design in plansync-redesign.md (project doc). v1 build history archived to docs/archive/BUILD_PLAN_V1.md
 
 ## Inconsistencies

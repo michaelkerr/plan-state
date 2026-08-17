@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from plansync import engine  # noqa: E402
 
 OWM_KEY = os.environ.get("OPENWEATHERMAP_API_KEY", "")
-OUTPUT_DIR = os.environ.get("PLANSYNC_OUTPUT_DIR", "/opt/plansync/sync-output")
+OUTPUT_DIR = os.environ.get("PLANSYNC_OUTPUT_DIR", "/opt/data/plansync/sync-output")
 
 TODAY = date.today()
 # Naive UTC, matching the format utcnow() produced (nothing reads these back)

@@ -14,23 +14,12 @@
 *.db-shm
 *.db.pre-migration
 
-# Sync output (runtime)
-sync-output/*.json
-
-# Domain plan data (runtime state managed by the MCP server, not source code).
-# rotation.json and reference.md are design docs and stay tracked.
-domains/*/*.json
-!domains/*/rotation.json
-
-# Dossiers (generated daily by export_dossier.py, never hand-edited).
-# docs/dossiers/ is the retired output path; current path is per-domain.
-docs/dossiers/
-domains/*/dossier.md
+# Domain data and runtime output live in reach-data (/opt/data/plansync/),
+# never in this repo. Safety net in case something runs with old defaults:
+domains/
+sync-output/
 
 # Python
 __pycache__/
 *.pyc
-
-# Legacy directories (safe to delete once deployed with new layout)
-plansync-data/
-gideon-data/
+.pytest_cache/

@@ -56,7 +56,7 @@ docker exec -it reach-gateway hermes chat -q 'Use the plansync tools to list dom
 - **Daily sync pipeline**: deterministic script -- weather pull, condition evaluation, trigger evaluation, date re-estimation, overdue check, summary output
 - **Morning briefing**: LLM-generated daily briefing from sync output (includes recent field observations)
 - **Evening nudge**: deterministic reminder of anything still open today; silent on clear days
-- **Dossier export**: per-domain markdown state files (`domains/{slug}/dossier.md`), regenerated daily, so sessions without MCP access can orient instantly
+- **Dossier export**: per-domain markdown state files (`/opt/data/plansync/domains/{slug}/dossier.md`), regenerated daily, so sessions without MCP access can orient instantly
 - **Registration script**: One-command install into a running Hermes instance
 
 See [BUILD_PLAN.md](BUILD_PLAN.md) for current status and next steps.

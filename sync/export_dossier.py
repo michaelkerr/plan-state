@@ -21,8 +21,7 @@ from datetime import date, datetime
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from plansync import engine  # noqa: E402
 
-PLANSYNC_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DOMAINS_DIR = os.environ.get("PLANSYNC_DOMAINS_DIR", os.path.join(PLANSYNC_ROOT, "domains"))
+DOMAINS_DIR = os.environ.get("PLANSYNC_DOMAINS_DIR", "/opt/data/plansync/domains")
 RECENT_DAYS = 14
 
 

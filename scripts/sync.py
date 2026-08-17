@@ -14,7 +14,7 @@ DOMAIN_JSON_SCRIPT = "/opt/plansync/sync/export_domain_json.py"
 
 env = os.environ.copy()
 env.setdefault("PLANSYNC_DB", "/opt/data/plansync/plansync.db")
-env.setdefault("PLANSYNC_OUTPUT_DIR", "/opt/plansync/sync-output")
+env.setdefault("PLANSYNC_OUTPUT_DIR", "/opt/data/plansync/sync-output")
 
 result = subprocess.run(
     [sys.executable, SYNC_SCRIPT],
