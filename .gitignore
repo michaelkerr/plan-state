@@ -17,6 +17,11 @@
 # Sync output (runtime)
 sync-output/*.json
 
+# Domain plan data (runtime state managed by the MCP server, not source code).
+# rotation.json and reference.md are design docs and stay tracked.
+domains/*/*.json
+!domains/*/rotation.json
+
 # Dossiers (generated daily by export_dossier.py, never hand-edited).
 # docs/dossiers/ is the retired output path; current path is per-domain.
 docs/dossiers/
