@@ -232,7 +232,8 @@
         {
           "name": "Remove & bag ALL Solanaceae debris (leaves, fruit, root stubs)",
           "step_type": "follow_up",
-          "lead_days": 0
+          "lead_days": 0,
+          "description": "Remove & bag ALL Solanaceae debris (leaves, fruit, root stubs). DONE Aug 15 2026."
         },
         {
           "name": "Hold jalape\u00f1os in place; move to pots ~Sept 15",
