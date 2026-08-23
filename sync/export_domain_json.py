@@ -22,8 +22,7 @@ import json
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from plansync import engine  # noqa: E402
+from plansync import engine
 
 DOMAINS_DIR = os.environ.get("PLANSYNC_DOMAINS_DIR", "/opt/data/plansync/domains")
 
@@ -117,8 +116,7 @@ def main():
         print(f"Database not found at {engine.db_path()}", file=sys.stderr)
         return 1
 
-    conn = engine.get_db()
-    try:
+    with engine.connect() as conn:
         domains = conn.execute("SELECT * FROM domains ORDER BY name").fetchall()
         for d in domains:
             slug = slugify(d["name"])
@@ -134,8 +132,6 @@ def main():
         print(f"exported {len(domains)} domain definitions to {DOMAINS_DIR}/*/",
               file=sys.stderr)
         return 0
-    finally:
-        conn.close()
 
 
 if __name__ == "__main__":

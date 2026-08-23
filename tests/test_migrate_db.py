@@ -232,26 +232,26 @@ class TestMigration:
 class TestPipelineAgainstMigratedDb:
     def test_sync_pipeline_runs_clean(self, migrated, tmp_path, monkeypatch):
         conn, result = migrated
-        sys.path.insert(0, os.path.join(ROOT, "sync"))
         import sync_pipeline
         summary = sync_pipeline.SyncSummary()
         sync_pipeline.evaluate_conditions(conn, summary)
         sync_pipeline.evaluate_triggers(conn, summary)
-        sync_pipeline.reestimate_dates(conn, summary)
+        sync_pipeline.cascade_dates(conn, summary)
         sync_pipeline.check_overdue(conn, summary)
         conn.commit()
         assert summary.errors == []
 
     def test_new_upsert_one_row_per_day(self, migrated):
         conn, _ = migrated
-        sys.path.insert(0, os.path.join(ROOT, "sync"))
         import sync_pipeline
-        sync_pipeline.upsert_weather_row(conn, "Murfreesboro,TN,US", 91.0, 71.0, "Clear", 0.0, "{}")
-        sync_pipeline.upsert_weather_row(conn, "Murfreesboro,TN,US", 93.0, 70.0, "Clouds", 0.0, "{}")
+        from datetime import date
+        today = date.today()
+        sync_pipeline.upsert_weather_row(conn, "Murfreesboro,TN,US", today, 91.0, 71.0, "Clear", 0.0, "{}")
+        sync_pipeline.upsert_weather_row(conn, "Murfreesboro,TN,US", today, 93.0, 70.0, "Clouds", 0.0, "{}")
         conn.commit()
         rows = conn.execute(
             "SELECT temp_high FROM weather_log WHERE location='Murfreesboro,TN,US' AND weather_date=?",
-            (sync_pipeline.TODAY.isoformat(),),
+            (today.isoformat(),),
         ).fetchall()
         assert len(rows) == 1
         assert rows[0]["temp_high"] == 93.0

@@ -10,8 +10,7 @@ import os
 import sys
 from datetime import date
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from plansync import engine  # noqa: E402
+from plansync import engine
 
 MAX_LINES = 10
 
@@ -55,11 +54,8 @@ def main():
     if not os.path.exists(engine.db_path()):
         print(f"Database not found at {engine.db_path()}", file=sys.stderr)
         sys.exit(1)
-    conn = engine.get_db()
-    try:
+    with engine.connect() as conn:
         msg = build_nudge(conn, date.today().isoformat())
-    finally:
-        conn.close()
     if msg:
         print(msg)
 

@@ -5,13 +5,10 @@ import asyncio
 import json
 import os
 import sqlite3
-import sys
 
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "mcp-server"))
-sys.path.insert(0, os.path.join(ROOT, "sync"))
 
 SCHEMA_PATH = os.path.join(ROOT, "schema.sql")
 
@@ -78,7 +75,7 @@ def call(fn, *args):
     conn = server.get_db()
     try:
         result = getattr(server, fn)(conn, *args)
-        return json.loads(result[0].text)
+        return json.loads(result.content[0].text)
     finally:
         conn.close()
 
@@ -219,4 +216,4 @@ class TestToolSurface:
     def test_removed_tools_return_unknown(self, db_path):
         import server
         result = asyncio.run(server.call_tool("create_domain", {"name": "X"}))
-        assert "Unknown tool" in json.loads(result[0].text)["error"]
+        assert "Unknown tool" in json.loads(result.content[0].text)["error"]

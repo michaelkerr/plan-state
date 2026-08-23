@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
 """Test derive_daily_range: daily high/low derived from the 3-hourly forecast."""
 
-import os
-import sys
 from datetime import datetime, timezone
 
 import pytest
-
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "sync"))
 
 import sync_pipeline
 

@@ -12,8 +12,7 @@ import os
 import sys
 from datetime import date, timedelta
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from plansync import engine  # noqa: E402
+from plansync import engine
 
 OUTPUT_DIR = os.environ.get("PLANSYNC_OUTPUT_DIR", "/opt/data/plansync/sync-output")
 TODAY = date.today().isoformat()
@@ -33,8 +32,7 @@ def main():
         print("\nNo database found.")
         return
 
-    conn = engine.get_db()
-    try:
+    with engine.connect() as conn:
         # The sync JSON above resets at midnight, so a trigger that fired
         # midday yesterday would vanish from it by this morning. activity_log
         # is the source of truth for the "what happened" narrative.
@@ -86,8 +84,9 @@ def main():
                       json_extract(l.new_value, '$.text') as observation,
                       d.name as domain
                FROM activity_log l
-               LEFT JOIN domains d ON d.id = json_extract(l.new_value, '$.domain_id')
+               LEFT JOIN domains d ON d.id = l.item_id
                WHERE l.action = 'observation'
+                 AND l.item_type = 'domain'
                  AND l.timestamp >= datetime('now', '-7 days')
                ORDER BY l.timestamp DESC""",
         ).fetchall()
@@ -102,8 +101,6 @@ def main():
                ORDER BY recorded_at DESC""",
         ).fetchall()
         print(json.dumps([dict(r) for r in weather], indent=2, default=str))
-    finally:
-        conn.close()
 
 
 if __name__ == "__main__":

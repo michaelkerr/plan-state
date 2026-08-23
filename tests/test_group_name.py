@@ -10,8 +10,6 @@ import sys
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "mcp-server"))
-sys.path.insert(0, os.path.join(ROOT, "sync"))
 
 SCHEMA_PATH = os.path.join(ROOT, "schema.sql")
 JSON_SCHEMA_PATH = os.path.join(ROOT, "domain_schema.json")
@@ -79,7 +77,7 @@ def call_tool(fn_name, args):
     conn = server.get_db()
     try:
         result = getattr(server, fn_name)(conn, args)
-        return json.loads(result[0].text)
+        return json.loads(result.content[0].text)
     finally:
         conn.close()
 
@@ -127,7 +125,7 @@ class TestQueryTools:
         import server
         conn = server.get_db()
         try:
-            plan = json.loads(server._get_domain_plan(conn, loaded["id"])[0].text)
+            plan = json.loads(server._get_domain_plan(conn, loaded["id"]).content[0].text)
         finally:
             conn.close()
         by_name = {a["name"]: a for a in plan["activities"]}
@@ -139,7 +137,7 @@ class TestQueryTools:
         import server
         conn = server.get_db()
         try:
-            result = json.loads(server._get_upcoming(conn, 14)[0].text)
+            result = json.loads(server._get_upcoming(conn, 14).content[0].text)
         finally:
             conn.close()
         by_name = {a["name"]: a for a in result["items"]}

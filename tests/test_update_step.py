@@ -4,13 +4,10 @@
 import json
 import os
 import sqlite3
-import sys
 
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "mcp-server"))
-sys.path.insert(0, ROOT)
 
 SCHEMA_PATH = os.path.join(ROOT, "schema.sql")
 
@@ -60,7 +57,7 @@ def loaded_domain(db_path):
     import server
     from plansync.engine import get_db
     conn = get_db()
-    result = json.loads(server._load_domain(conn, {"definition": DOMAIN})[0].text)
+    result = json.loads(server._load_domain(conn, {"definition": DOMAIN}).content[0].text)
     conn.close()
     did = result["id"]
     act = result["activities"][0]
@@ -73,7 +70,7 @@ def call_update_step(args):
     import server
     from plansync.engine import get_db
     conn = get_db()
-    result = json.loads(server._update_step(conn, args)[0].text)
+    result = json.loads(server._update_step(conn, args).content[0].text)
     conn.close()
     return result
 

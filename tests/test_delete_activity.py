@@ -5,13 +5,10 @@ or permanent (all traces removed)."""
 import json
 import os
 import sqlite3
-import sys
 
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "mcp-server"))
-sys.path.insert(0, ROOT)
 
 SCHEMA_PATH = os.path.join(ROOT, "schema.sql")
 
@@ -50,7 +47,7 @@ def call(fn, args):
     import server
     conn = server.get_db()
     try:
-        return json.loads(getattr(server, fn)(conn, args)[0].text)
+        return json.loads(getattr(server, fn)(conn, args).content[0].text)
     finally:
         conn.close()
 

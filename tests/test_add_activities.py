@@ -4,12 +4,10 @@
 import json
 import os
 import sqlite3
-import sys
 
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "mcp-server"))
 
 SCHEMA_PATH = os.path.join(ROOT, "schema.sql")
 
@@ -110,7 +108,7 @@ def call_tool(fn_name, args):
     conn = server.get_db()
     try:
         result = getattr(server, fn_name)(conn, args)
-        return json.loads(result[0].text)
+        return json.loads(result.content[0].text)
     finally:
         conn.close()
 

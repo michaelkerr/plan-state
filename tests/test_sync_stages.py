@@ -5,16 +5,13 @@ inputs and outputs; main() aggregates them into the summary."""
 import json
 import os
 import sqlite3
-import sys
 from datetime import date, timedelta
 
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "sync"))
-sys.path.insert(0, ROOT)
 
-import sync_pipeline  # noqa: E402
+import sync_pipeline
 
 SCHEMA_PATH = os.path.join(ROOT, "schema.sql")
 TODAY = date.today()
@@ -112,6 +109,3 @@ class TestSummaryAggregation:
         assert summary.triggers_fired == fired["fired"]
         assert summary.overdue == overdue["overdue"]
 
-    def test_legacy_alias_reestimate_dates(self, db):
-        # Old name kept as an alias so external callers don't break
-        assert sync_pipeline.reestimate_dates is sync_pipeline.cascade_dates

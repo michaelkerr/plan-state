@@ -18,8 +18,7 @@ import os
 import sys
 from datetime import date, timedelta
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from plansync import engine  # noqa: E402
+from plansync import engine
 
 TODAY = date.today().isoformat()
 WEEK_CUTOFF = (date.today() + timedelta(days=7)).isoformat()
@@ -235,11 +234,8 @@ def main():
     if not os.path.exists(engine.db_path()):
         print(f"Database not found at {engine.db_path()}", file=sys.stderr)
         sys.exit(1)
-    conn = engine.get_db()
-    try:
+    with engine.connect() as conn:
         print(build_briefing(conn))
-    finally:
-        conn.close()
 
 
 if __name__ == "__main__":

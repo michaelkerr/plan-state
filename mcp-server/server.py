@@ -3,20 +3,17 @@
 
 import asyncio
 import json
-import os
 import sqlite3
-import sys
-import uuid
 from datetime import date, timedelta
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 import mcp.types as types
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from plansync.engine import (  # noqa: E402
+from plansync.engine import (
     cascade_step_dates,
     compute_trigger_date,
+    connect,
     defer_trigger_def,
     derive_conditions,
     get_actionable_items,
@@ -24,23 +21,36 @@ from plansync.engine import (  # noqa: E402
     get_open_activities,
     log_change,
     new_batch_id,
+    new_id,
     react,
     row_to_dict,
-    slugify,
     step_due_date,
     transition,
-    unique_ref_name,
+)
+from plansync.authoring import (
+    insert_activity,
+    sync_domain,
+    validate_activities,
+    validate_domain_definition,
 )
 
 server = Server("plansync")
 
 
-def new_id() -> str:
-    return uuid.uuid4().hex[:12]
+def ok(data) -> types.CallToolResult:
+    return types.CallToolResult(
+        content=[types.TextContent(type="text", text=json.dumps(data, default=str, indent=2))],
+    )
 
 
-def ok(data) -> list[types.TextContent]:
-    return [types.TextContent(type="text", text=json.dumps(data, default=str, indent=2))]
+def err(message, details=None) -> types.CallToolResult:
+    body = {"error": message}
+    if details is not None:
+        body["details"] = details
+    return types.CallToolResult(
+        content=[types.TextContent(type="text", text=json.dumps(body, default=str, indent=2))],
+        isError=True,
+    )
 
 
 @server.list_tools()
@@ -62,7 +72,7 @@ async def list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="update_activity",
-            description="Update fields on an existing activity. Re-cascades step dates if trigger_date changes.",
+            description="Update fields on an existing activity. Re-cascades step dates if trigger_date changes. Status changes must go through complete_activity, defer_activity, or delete_activity.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -70,7 +80,6 @@ async def list_tools() -> list[types.Tool]:
                     "name": {"type": "string"},
                     "description": {"type": "string"},
                     "group_name": {"type": "string", "description": "Optional bundle label within the domain (crop, bed, species). Display only."},
-                    "status": {"type": "string", "enum": ["watching", "preparing", "active", "completed", "skipped"]},
                     "trigger_type": {"type": "string"},
                     "trigger_def": {"type": "object"},
                     "trigger_date": {"type": "string", "format": "date"},
@@ -235,9 +244,8 @@ async def list_tools() -> list[types.Tool]:
 
 
 @server.call_tool()
-async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
-    conn = get_db()
-    try:
+async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
+    with connect() as conn:
         if name == "get_domains":
             return _get_domains(conn)
         elif name == "get_domain_plan":
@@ -267,12 +275,10 @@ async def call_tool(name: str, arguments: dict) -> list[types.TextContent]:
         elif name == "undo":
             return _undo(conn, arguments)
         else:
-            return ok({"error": f"Unknown tool: {name}"})
-    finally:
-        conn.close()
+            return err(f"Unknown tool: {name}")
 
 
-def _get_domains(conn) -> list[types.TextContent]:
+def _get_domains(conn) -> types.CallToolResult:
     domains = conn.execute("SELECT * FROM domains ORDER BY name").fetchall()
     result = []
     for d in domains:
@@ -287,10 +293,10 @@ def _get_domains(conn) -> list[types.TextContent]:
     return ok(result)
 
 
-def _get_domain_plan(conn, domain_id) -> list[types.TextContent]:
+def _get_domain_plan(conn, domain_id) -> types.CallToolResult:
     domain = conn.execute("SELECT * FROM domains WHERE id=?", (domain_id,)).fetchone()
     if not domain:
-        return ok({"error": f"Domain {domain_id} not found"})
+        return err(f"Domain {domain_id} not found")
     domain = row_to_dict(domain)
 
     activities = conn.execute(
@@ -314,24 +320,24 @@ def _get_domain_plan(conn, domain_id) -> list[types.TextContent]:
     return ok(domain)
 
 
-def _load_domain(conn, args) -> list[types.TextContent]:
+def _load_domain(conn, args) -> types.CallToolResult:
     defn = args.get("definition")
     if not defn:
-        return ok({"error": "Missing 'definition' field"})
+        return err("Missing 'definition' field")
 
-    errors = _validate_domain_definition(defn)
+    errors = validate_domain_definition(defn)
     if errors:
-        return ok({"error": "Validation failed", "details": errors})
+        return err("Validation failed", details=errors)
 
     name = defn["name"]
     existing = conn.execute("SELECT * FROM domains WHERE name=?", (name,)).fetchone()
     if existing:
-        # Sync mode: diff the declaration against DB state (Step 47)
         try:
-            return _sync_domain(conn, existing, defn, dry_run=bool(args.get("dry_run")))
+            result = sync_domain(conn, existing, defn, dry_run=bool(args.get("dry_run")))
+            return ok(result)
         except (ValueError, sqlite3.Error) as e:
             conn.rollback()
-            return ok({"error": str(e)})
+            return err(str(e))
 
     try:
         did = new_id()
@@ -350,7 +356,7 @@ def _load_domain(conn, args) -> list[types.TextContent]:
 
         for i, act_def in enumerate(defn["activities"]):
             aid = name_to_id[act_def["name"]]
-            activity_results.append(_insert_activity(conn, did, aid, act_def, name_to_id, default_sort=i))
+            activity_results.append(insert_activity(conn, did, aid, act_def, name_to_id, default_sort=i))
 
         conn.commit()
         return ok({
@@ -362,274 +368,27 @@ def _load_domain(conn, args) -> list[types.TextContent]:
 
     except (ValueError, sqlite3.Error) as e:
         conn.rollback()
-        return ok({"error": str(e)})
+        return err(str(e))
 
 
-def _canonical_tdef(tdef):
-    if isinstance(tdef, str):
-        tdef = json.loads(tdef)
-    return json.dumps(tdef, sort_keys=True) if tdef is not None else None
-
-
-ACTIVITY_SYNC_FIELDS = ("name", "description", "group_name")
-STEP_SYNC_FIELDS = ("step_type", "lead_days", "description")
-
-
-def _sync_domain(conn, domain_row, defn, dry_run):
-    """Diff a declaration against an existing domain and (unless dry_run)
-    apply it. Activities match by declared ref_name, then exact name, then
-    auto-slug. Nothing is deleted: DB rows absent from the declaration are
-    flagged. Omitted trigger fields leave the DB trigger alone (declarations
-    may be partial); an explicit trigger_def change re-derives conditions,
-    trigger_date, and step dates."""
-    did = domain_row["id"]
-    db_acts = [row_to_dict(r) for r in conn.execute(
-        "SELECT * FROM activities WHERE domain_id=?", (did,)).fetchall()]
-    by_ref = {a["ref_name"]: a for a in db_acts}
-    by_name = {a["name"]: a for a in db_acts}
-
-    matched, to_create = [], []
-    for decl in defn["activities"]:
-        ref = decl.get("ref_name")
-        db_act = by_ref.get(ref) if ref else (by_name.get(decl["name"]) or by_ref.get(slugify(decl["name"])))
-        (matched if db_act is not None else to_create).append((db_act, decl))
-    to_create = [decl for _, decl in to_create]
-
-    matched_ids = {a["id"] for a, _ in matched}
-    flagged = [{"id": a["id"], "name": a["name"], "ref_name": a["ref_name"], "status": a["status"]}
-               for a in db_acts if a["id"] not in matched_ids]
-
-    # Dependency trigger_defs are stored ref-resolved (activity_id), while
-    # declarations carry activity_ref names -- resolve before comparing.
-    # New activities get their ids up front so refs to them resolve too.
-    name_to_id = {a["name"]: a["id"] for a in db_acts}
-    for decl in to_create:
-        name_to_id[decl["name"]] = new_id()
-
-    updates, step_creates, step_updates, step_flags = [], [], [], []
-    for db_act, decl in matched:
-        changes = {}
-        for f in ACTIVITY_SYNC_FIELDS:
-            if f in decl and decl[f] != db_act.get(f):
-                changes[f] = {"old": db_act.get(f), "new": decl[f]}
-        decl_tdef = decl.get("trigger_def")
-        if decl_tdef is not None:
-            decl_tdef = _resolve_refs(decl_tdef, name_to_id)
-            if isinstance(decl_tdef, dict) and decl_tdef.get("_error"):
-                raise ValueError(decl_tdef["_error"])
-        if "trigger_def" in decl and _canonical_tdef(decl_tdef) != _canonical_tdef(db_act.get("trigger_def")):
-            changes["trigger_def"] = {"old": db_act.get("trigger_def"), "new": decl_tdef}
-            if decl.get("trigger_type") != db_act.get("trigger_type"):
-                changes["trigger_type"] = {"old": db_act.get("trigger_type"), "new": decl.get("trigger_type")}
-        if changes:
-            updates.append({"id": db_act["id"], "ref_name": db_act["ref_name"], "changes": changes})
-
-        db_steps = {s["name"]: row_to_dict(s) for s in conn.execute(
-            "SELECT * FROM steps WHERE activity_id=?", (db_act["id"],)).fetchall()}
-        decl_steps = decl.get("steps", [])
-        for sd in decl_steps:
-            db_step = db_steps.get(sd["name"])
-            if db_step is None:
-                step_creates.append({"activity_id": db_act["id"], "activity_ref": db_act["ref_name"],
-                                     "name": sd["name"], "decl": sd})
-                continue
-            s_changes = {f: {"old": db_step.get(f), "new": sd[f]}
-                         for f in STEP_SYNC_FIELDS if f in sd and sd[f] != db_step.get(f)}
-            if s_changes:
-                step_updates.append({"id": db_step["id"], "activity_id": db_act["id"],
-                                     "name": sd["name"], "changes": s_changes})
-        decl_step_names = {sd["name"] for sd in decl_steps}
-        for s_name, db_step in db_steps.items():
-            if s_name not in decl_step_names:
-                step_flags.append({"id": db_step["id"], "name": s_name,
-                                   "activity_ref": db_act["ref_name"], "status": db_step["status"]})
-
-    result = {
-        "mode": "sync",
-        "domain_id": did,
-        "dry_run": dry_run,
-        "applied": False,
-        "created": [{"name": d["name"]} for d in to_create],
-        "updated": updates,
-        "flagged_missing": flagged,
-        "steps_created": [{"activity_ref": sc["activity_ref"], "name": sc["name"]} for sc in step_creates],
-        "steps_updated": [{"name": su["name"], "changes": su["changes"]} for su in step_updates],
-        "steps_flagged": step_flags,
-    }
-    if dry_run:
-        return ok(result)
-
-    batch = new_batch_id()
-    created_results = []
-    max_sort = max((a.get("sort_order") or 0 for a in db_acts), default=0)
-    for i, decl in enumerate(to_create):
-        created_results.append(_insert_activity(conn, did, name_to_id[decl["name"]], decl,
-                                                name_to_id, default_sort=max_sort + i + 1))
-
-    for upd in updates:
-        aid = upd["id"]
-        db_act = next(a for a in db_acts if a["id"] == aid)
-        changes = upd["changes"]
-        sets, vals = [], []
-        for f, ch in changes.items():
-            if f == "trigger_def":
-                vals.append(json.dumps(ch["new"]))
-            else:
-                vals.append(ch["new"])
-            sets.append(f"{f}=?")
-        sets.append("updated_at=CURRENT_TIMESTAMP")
-        vals.append(aid)
-        conn.execute(f"UPDATE activities SET {', '.join(sets)} WHERE id=?", vals)
-        log_change(conn, "activity", aid, "manual_update",
-                   {f: ch["old"] for f, ch in changes.items()},
-                   {f: ch["new"] for f, ch in changes.items()},
-                   batch_id=batch)
-        if "trigger_def" in changes:
-            new_tdef = changes["trigger_def"]["new"]
-            conn.execute("DELETE FROM conditions WHERE activity_id=?", (aid,))
-            for cond_def in derive_conditions(new_tdef):
-                conn.execute(
-                    "INSERT INTO conditions (id, activity_id, condition_type, definition) VALUES (?,?,?,?)",
-                    (new_id(), aid, cond_def["condition_type"], json.dumps(cond_def["definition"])),
-                )
-            new_td = compute_trigger_date(new_tdef)
-            if new_td != db_act.get("trigger_date"):
-                conn.execute("UPDATE activities SET trigger_date=? WHERE id=?", (new_td, aid))
-                cascade_step_dates(conn, aid, new_td, batch_id=batch)
-            if db_act.get("trigger_def") is None and db_act.get("status") == "active":
-                transition(conn, "activity", aid, "watch", {"batch_id": batch})
-
-    for sc in step_creates:
-        parent = conn.execute("SELECT trigger_date FROM activities WHERE id=?",
-                              (sc["activity_id"],)).fetchone()
-        sd = sc["decl"]
-        due = step_due_date(parent["trigger_date"], sd["step_type"], sd["lead_days"])
-        max_step_sort = conn.execute(
-            "SELECT COALESCE(MAX(sort_order), -1) AS m FROM steps WHERE activity_id=?",
-            (sc["activity_id"],)).fetchone()["m"]
-        sid = new_id()
-        conn.execute(
-            """INSERT INTO steps (id, activity_id, name, description, step_type, lead_days, due_date, sort_order)
-               VALUES (?,?,?,?,?,?,?,?)""",
-            (sid, sc["activity_id"], sd["name"], sd.get("description"),
-             sd["step_type"], sd["lead_days"], due, max_step_sort + 1),
-        )
-        log_change(conn, "step", sid, "created", None,
-                   {"name": sd["name"], "activity_id": sc["activity_id"], "due_date": due},
-                   batch_id=batch)
-
-    for su in step_updates:
-        changes = su["changes"]
-        sets = [f"{f}=?" for f in changes]
-        vals = [ch["new"] for ch in changes.values()]
-        if "lead_days" in changes or "step_type" in changes:
-            parent = conn.execute(
-                "SELECT trigger_date FROM activities WHERE id=?", (su["activity_id"],)).fetchone()
-            if parent["trigger_date"]:
-                current_step = conn.execute("SELECT * FROM steps WHERE id=?", (su["id"],)).fetchone()
-                new_type = changes.get("step_type", {}).get("new", current_step["step_type"])
-                new_lead = changes.get("lead_days", {}).get("new", current_step["lead_days"])
-                sets.append("due_date=?")
-                vals.append(step_due_date(parent["trigger_date"], new_type, new_lead))
-        sets.append("updated_at=CURRENT_TIMESTAMP")
-        vals.append(su["id"])
-        conn.execute(f"UPDATE steps SET {', '.join(sets)} WHERE id=?", vals)
-        log_change(conn, "step", su["id"], "manual_update",
-                   {f: ch["old"] for f, ch in changes.items()},
-                   {f: ch["new"] for f, ch in changes.items()},
-                   batch_id=batch)
-
-    conn.commit()
-    result["applied"] = True
-    result["batch_id"] = batch
-    result["created"] = created_results
-    return ok(result)
-
-
-def _insert_activity(conn, domain_id, aid, act_def, name_to_id, default_sort):
-    """Insert one activity with its steps and conditions. Raises ValueError on
-    unresolvable dependency refs; caller owns the transaction.
-
-    No trigger = decided work: starts 'active' with no trigger_date, no
-    conditions, NULL step due dates (set via update_step or when a
-    trigger_def is added later)."""
-    trigger_def = act_def.get("trigger_def")
-    if trigger_def is not None:
-        trigger_def = _resolve_refs(trigger_def, name_to_id)
-        if isinstance(trigger_def, dict) and trigger_def.get("_error"):
-            raise ValueError(trigger_def["_error"])
-
-    trigger_def_str = json.dumps(trigger_def) if trigger_def is not None else None
-    trigger_date = compute_trigger_date(trigger_def) if trigger_def is not None else None
-    status = "watching" if trigger_def is not None else "active"
-    # Stable identity: explicit ref_name is used as-is (unique index rejects
-    # duplicates); auto-generated slugs uniquify against the domain
-    ref_name = act_def.get("ref_name") or unique_ref_name(conn, domain_id, slugify(act_def["name"]))
-
-    conn.execute(
-        """INSERT INTO activities (id, domain_id, name, ref_name, description, group_name, status, trigger_type, trigger_def, trigger_date, sort_order)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-        (
-            aid, domain_id, act_def["name"], ref_name, act_def.get("description"), act_def.get("group_name"),
-            status, act_def.get("trigger_type"), trigger_def_str, trigger_date,
-            act_def.get("sort_order", default_sort),
-        ),
-    )
-    log_change(conn, "activity", aid, "created", None,
-               {"name": act_def["name"], "ref_name": ref_name,
-                "trigger_type": act_def.get("trigger_type"), "status": status})
-
-    created_steps = []
-    for j, step_def in enumerate(act_def.get("steps", [])):
-        sid = new_id()
-        due = step_due_date(trigger_date, step_def["step_type"], step_def["lead_days"])
-        conn.execute(
-            """INSERT INTO steps (id, activity_id, name, description, step_type, lead_days, due_date, sort_order)
-               VALUES (?,?,?,?,?,?,?,?)""",
-            (
-                sid, aid, step_def["name"], step_def.get("description"),
-                step_def["step_type"], step_def["lead_days"], due, j,
-            ),
-        )
-        created_steps.append({"id": sid, "name": step_def["name"], "due_date": due})
-
-    for cond_def in derive_conditions(trigger_def) if trigger_def is not None else []:
-        cid = new_id()
-        conn.execute(
-            "INSERT INTO conditions (id, activity_id, condition_type, definition) VALUES (?,?,?,?)",
-            (cid, aid, cond_def["condition_type"], json.dumps(cond_def["definition"])),
-        )
-
-    return {
-        "id": aid,
-        "name": act_def["name"],
-        "ref_name": ref_name,
-        "group_name": act_def.get("group_name"),
-        "trigger_type": act_def.get("trigger_type"),
-        "trigger_date": trigger_date,
-        "status": status,
-        "steps": created_steps,
-    }
-
-
-def _add_activities(conn, args) -> list[types.TextContent]:
+def _add_activities(conn, args) -> types.CallToolResult:
     domain_id = args.get("domain_id")
     activities = args.get("activities")
 
     domain = conn.execute("SELECT * FROM domains WHERE id=?", (domain_id,)).fetchone()
     if not domain:
-        return ok({"error": f"Domain {domain_id} not found"})
+        return err(f"Domain {domain_id} not found")
     if not isinstance(activities, list) or len(activities) == 0:
-        return ok({"error": "activities must be a non-empty array"})
+        return err("activities must be a non-empty array")
 
     existing = conn.execute(
         "SELECT id, name, sort_order FROM activities WHERE domain_id=?", (domain_id,)
     ).fetchall()
     existing_names = {r["name"] for r in existing}
 
-    errors = _validate_activities(activities, [], existing_names)
+    errors = validate_activities(activities, [], existing_names)
     if errors:
-        return ok({"error": "Validation failed", "details": errors})
+        return err("Validation failed", details=errors)
 
     name_to_id = {r["name"]: r["id"] for r in existing}
     for act_def in activities:
@@ -640,7 +399,7 @@ def _add_activities(conn, args) -> list[types.TextContent]:
         results = []
         for i, act_def in enumerate(activities):
             aid = name_to_id[act_def["name"]]
-            results.append(_insert_activity(conn, domain_id, aid, act_def, name_to_id, default_sort=max_sort + i + 1))
+            results.append(insert_activity(conn, domain_id, aid, act_def, name_to_id, default_sort=max_sort + i + 1))
         conn.commit()
         return ok({
             "domain_id": domain_id,
@@ -649,158 +408,25 @@ def _add_activities(conn, args) -> list[types.TextContent]:
         })
     except (ValueError, sqlite3.Error) as e:
         conn.rollback()
-        return ok({"error": str(e)})
+        return err(str(e))
 
 
-def _validate_domain_definition(defn):
-    errors = []
-    if not isinstance(defn, dict):
-        return [{"path": "", "error": "Definition must be an object"}]
-    if "name" not in defn:
-        errors.append({"path": "name", "error": "Required field missing"})
-    if "activities" not in defn:
-        errors.append({"path": "activities", "error": "Required field missing"})
-    elif not isinstance(defn["activities"], list) or len(defn["activities"]) == 0:
-        errors.append({"path": "activities", "error": "Must be a non-empty array"})
-    else:
-        _validate_activities(defn["activities"], errors)
-
-    return errors
-
-
-def _validate_activities(activities, errors, existing_names=frozenset()):
-    """Validate a batch of activity definitions. existing_names are activities
-    already in the domain: duplicates against them are rejected, but dependency
-    refs may resolve to them."""
-    valid_trigger_types = {"calendar", "condition", "dependency", "compound"}
-    valid_step_types = {"prep", "follow_up"}
-    batch_names = set()
-    for i, act in enumerate(activities):
-        prefix = f"activities[{i}]"
-        if not isinstance(act, dict):
-            errors.append({"path": prefix, "error": "Must be an object"})
-            continue
-        if "conditions" in act:
-            errors.append({
-                "path": f"{prefix}.conditions",
-                "error": "Explicit conditions arrays are no longer accepted; conditions rows are derived automatically from condition-type leaves in trigger_def. Remove this field.",
-            })
-        if "recurrence" in act:
-            errors.append({
-                "path": f"{prefix}.recurrence",
-                "error": "recurrence is not supported (it was never evaluated). Annual plans are re-authored each season via a planning conversation. Remove this field.",
-            })
-        if "name" not in act:
-            errors.append({"path": f"{prefix}.name", "error": "Required field missing"})
-        elif act["name"] in batch_names or act["name"] in existing_names:
-            errors.append({"path": f"{prefix}.name", "error": f"Duplicate activity name: {act['name']}"})
-        else:
-            batch_names.add(act["name"])
-        # Triggers are optional (Step 42): an activity without one is decided
-        # work and starts 'active'. But trigger_type and trigger_def come as a
-        # pair -- one without the other is an authoring mistake.
-        has_type, has_def = "trigger_type" in act, "trigger_def" in act
-        if has_type and act["trigger_type"] not in valid_trigger_types:
-            errors.append({"path": f"{prefix}.trigger_type", "error": f"Invalid trigger type: {act['trigger_type']}"})
-        if has_type and not has_def:
-            errors.append({"path": f"{prefix}.trigger_def", "error": "trigger_type given without trigger_def; provide both or neither (no trigger = immediately active work)"})
-        if has_def and not has_type:
-            errors.append({"path": f"{prefix}.trigger_type", "error": "trigger_def given without trigger_type; provide both or neither (no trigger = immediately active work)"})
-        for j, step in enumerate(act.get("steps", [])):
-            sp = f"{prefix}.steps[{j}]"
-            if "condition" in step:
-                errors.append({
-                    "path": f"{sp}.condition",
-                    "error": "Step conditions are not supported (they were never evaluated). If this step needs its own trigger, make it an activity. Remove this field.",
-                })
-            if "name" not in step:
-                errors.append({"path": f"{sp}.name", "error": "Required field missing"})
-            if "step_type" not in step:
-                errors.append({"path": f"{sp}.step_type", "error": "Required field missing"})
-            elif step["step_type"] not in valid_step_types:
-                errors.append({"path": f"{sp}.step_type", "error": f"Invalid step type: {step['step_type']}"})
-            if "lead_days" not in step:
-                errors.append({"path": f"{sp}.lead_days", "error": "Required field missing"})
-            elif not isinstance(step["lead_days"], int) or step["lead_days"] < 0:
-                errors.append({"path": f"{sp}.lead_days", "error": "Must be a non-negative integer"})
-
-    ref_names = batch_names | set(existing_names)
-    for i, act in enumerate(activities):
-        if isinstance(act, dict):
-            tdef = act.get("trigger_def", {})
-            _validate_dependency_refs(tdef, ref_names, f"activities[{i}].trigger_def", errors)
-            _validate_condition_metrics(tdef, f"activities[{i}].trigger_def", errors)
-
-    return errors
-
-
-VALID_METRICS = {"daily_high", "daily_low", "temp_high", "temp_low"}
-
-
-def _validate_condition_metrics(tdef, path, errors):
-    if not isinstance(tdef, dict):
-        return
-    if tdef.get("type") == "condition":
-        for j, clause in enumerate(tdef.get("all", [])):
-            metric = clause.get("metric") if isinstance(clause, dict) else None
-            if metric == "soil_temp":
-                errors.append({
-                    "path": f"{path}.all[{j}].metric",
-                    "error": "soil_temp is not available (no data source supplies it) -- use daily_high as a proxy",
-                })
-            elif metric not in VALID_METRICS:
-                errors.append({
-                    "path": f"{path}.all[{j}].metric",
-                    "error": f"Unknown metric '{metric}'. Valid metrics: daily_high, daily_low, temp_high, temp_low",
-                })
-    if tdef.get("type") == "compound":
-        for j, sub in enumerate(tdef.get("conditions", [])):
-            _validate_condition_metrics(sub, f"{path}.conditions[{j}]", errors)
-
-
-def _validate_dependency_refs(tdef, activity_names, path, errors):
-    if not isinstance(tdef, dict):
-        return
-    if tdef.get("type") == "dependency" and "activity_ref" in tdef:
-        if tdef["activity_ref"] not in activity_names:
-            errors.append({"path": f"{path}.activity_ref", "error": f"References unknown activity: {tdef['activity_ref']}"})
-    if tdef.get("type") == "compound":
-        for j, sub in enumerate(tdef.get("conditions", [])):
-            _validate_dependency_refs(sub, activity_names, f"{path}.conditions[{j}]", errors)
-
-
-def _resolve_refs(tdef, name_to_id):
-    if not isinstance(tdef, dict):
-        return tdef
-    result = dict(tdef)
-    if result.get("type") == "dependency" and "activity_ref" in result:
-        ref_name = result.pop("activity_ref")
-        if ref_name not in name_to_id:
-            return {"_error": f"Cannot resolve activity_ref '{ref_name}': no activity with that name in this domain"}
-        result["activity_id"] = name_to_id[ref_name]
-    if result.get("type") == "compound" and "conditions" in result:
-        resolved_subs = []
-        for sub in result["conditions"]:
-            resolved = _resolve_refs(sub, name_to_id)
-            if isinstance(resolved, dict) and resolved.get("_error"):
-                return resolved
-            resolved_subs.append(resolved)
-        result["conditions"] = resolved_subs
-    return result
-
-
-def _update_activity(conn, args) -> list[types.TextContent]:
+def _update_activity(conn, args) -> types.CallToolResult:
     aid = args["activity_id"]
     current = conn.execute("SELECT * FROM activities WHERE id=?", (aid,)).fetchone()
     if not current:
-        return ok({"error": f"Activity {aid} not found"})
+        return err(f"Activity {aid} not found")
     current = row_to_dict(current)
 
     if "ref_name" in args:
-        return ok({"error": "ref_name is immutable: it is the stable identity used to match "
-                            "declared activities to DB rows across renames. Rename via 'name'."})
+        return err("ref_name is immutable: it is the stable identity used to match "
+                   "declared activities to DB rows across renames. Rename via 'name'.")
 
-    updatable = ["name", "description", "group_name", "status", "trigger_type", "trigger_def", "trigger_date"]
+    if "status" in args:
+        return err("status cannot be set through update_activity: use complete_activity, "
+                   "defer_activity, or delete_activity (skip) instead")
+
+    updatable = ["name", "description", "group_name", "trigger_type", "trigger_def", "trigger_date"]
     sets, vals, changes = [], [], {}
     for field in updatable:
         if field in args and args[field] is not None:
@@ -812,7 +438,7 @@ def _update_activity(conn, args) -> list[types.TextContent]:
             changes[field] = {"old": current.get(field), "new": args[field]}
 
     if not sets:
-        return ok({"error": "No fields to update"})
+        return err("No fields to update")
 
     sets.append("updated_at=CURRENT_TIMESTAMP")
     vals.append(aid)
@@ -839,10 +465,7 @@ def _update_activity(conn, args) -> list[types.TextContent]:
             conn.execute("UPDATE activities SET trigger_date=? WHERE id=?", (new_td, aid))
             cascade_step_dates(conn, aid, new_td)
 
-    if "status" in changes:
-        log_change(conn, "activity", aid, "status_change", {"status": changes["status"]["old"]}, {"status": changes["status"]["new"]})
-    else:
-        log_change(conn, "activity", aid, "manual_update", {k: v["old"] for k, v in changes.items()}, {k: v["new"] for k, v in changes.items()})
+    log_change(conn, "activity", aid, "manual_update", {k: v["old"] for k, v in changes.items()}, {k: v["new"] for k, v in changes.items()})
 
     conn.commit()
 
@@ -855,16 +478,16 @@ def _update_activity(conn, args) -> list[types.TextContent]:
     return ok(updated)
 
 
-def _add_step(conn, args) -> list[types.TextContent]:
+def _add_step(conn, args) -> types.CallToolResult:
     aid = args["activity_id"]
     activity = conn.execute("SELECT * FROM activities WHERE id=?", (aid,)).fetchone()
     if not activity:
-        return ok({"error": f"Activity {aid} not found"})
+        return err(f"Activity {aid} not found")
     if args.get("step_type") not in ("prep", "follow_up"):
-        return ok({"error": f"Invalid step_type: {args.get('step_type')!r} (expected 'prep' or 'follow_up')"})
+        return err(f"Invalid step_type: {args.get('step_type')!r} (expected 'prep' or 'follow_up')")
     lead_days = args.get("lead_days")
     if not isinstance(lead_days, int) or lead_days < 0:
-        return ok({"error": "lead_days must be a non-negative integer"})
+        return err("lead_days must be a non-negative integer")
 
     sid = new_id()
     due = step_due_date(activity["trigger_date"], args["step_type"], lead_days)
@@ -906,11 +529,11 @@ def _step_status_event(current, desired):
     return None, None
 
 
-def _update_step(conn, args) -> list[types.TextContent]:
+def _update_step(conn, args) -> types.CallToolResult:
     sid = args["step_id"]
     current = conn.execute("SELECT * FROM steps WHERE id=?", (sid,)).fetchone()
     if not current:
-        return ok({"error": f"Step {sid} not found"})
+        return err(f"Step {sid} not found")
     current = row_to_dict(current)
 
     updatable = ["name", "description", "lead_days", "step_type"]
@@ -924,7 +547,7 @@ def _update_step(conn, args) -> list[types.TextContent]:
 
     desired_status = args.get("status")
     if not sets and desired_status is None:
-        return ok({"error": "No fields to update"})
+        return err("No fields to update")
 
     batch = new_batch_id()
 
@@ -952,13 +575,13 @@ def _update_step(conn, args) -> list[types.TextContent]:
     if desired_status is not None and desired_status != current["status"]:
         event, context = _step_status_event(current["status"], desired_status)
         if event is None:
-            return ok({"error": f"cannot move step {sid} from '{current['status']}' "
-                                f"to '{desired_status}': no such transition"})
+            return err(f"cannot move step {sid} from '{current['status']}' "
+                       f"to '{desired_status}': no such transition")
         context["batch_id"] = batch
         try:
             transition(conn, "step", sid, event, context)
         except ValueError as e:
-            return ok({"error": str(e)})
+            return err(str(e))
 
     conn.commit()
 
@@ -975,11 +598,11 @@ def _update_step(conn, args) -> list[types.TextContent]:
     return ok(updated)
 
 
-def _complete_activity(conn, args) -> list[types.TextContent]:
+def _complete_activity(conn, args) -> types.CallToolResult:
     aid = args["activity_id"]
     current = conn.execute("SELECT * FROM activities WHERE id=?", (aid,)).fetchone()
     if not current:
-        return ok({"error": f"Activity {aid} not found"})
+        return err(f"Activity {aid} not found")
 
     batch = new_batch_id()
     context = {"batch_id": batch}
@@ -988,7 +611,7 @@ def _complete_activity(conn, args) -> list[types.TextContent]:
     try:
         events = transition(conn, "activity", aid, "complete", context)
     except ValueError as e:
-        return ok({"error": str(e)})
+        return err(str(e))
 
     result = react(conn, events, batch)
     conn.commit()
@@ -1001,16 +624,16 @@ def _complete_activity(conn, args) -> list[types.TextContent]:
     })
 
 
-def _defer_activity(conn, args) -> list[types.TextContent]:
+def _defer_activity(conn, args) -> types.CallToolResult:
     aid = args["activity_id"]
     current = conn.execute("SELECT * FROM activities WHERE id=?", (aid,)).fetchone()
     if not current:
-        return ok({"error": f"Activity {aid} not found"})
+        return err(f"Activity {aid} not found")
 
     new_date = args.get("new_date")
     reason = args.get("reason", "")
     if not new_date:
-        return ok({"error": "new_date is required: deferral moves the trigger date (there is no 'deferred' status)"})
+        return err("new_date is required: deferral moves the trigger date (there is no 'deferred' status)")
 
     # Deferral is a date move, not a status: the activity returns to 'watching'
     # so the cron re-fires it on the new date (evaluate_triggers only scans
@@ -1020,7 +643,7 @@ def _defer_activity(conn, args) -> list[types.TextContent]:
     try:
         transition(conn, "activity", aid, "defer", {"batch_id": batch})
     except ValueError as e:
-        return ok({"error": str(e)})
+        return err(str(e))
 
     old_tdef = row_to_dict(current)["trigger_def"]
     new_tdef = defer_trigger_def(old_tdef, new_date)
@@ -1048,11 +671,11 @@ def _defer_activity(conn, args) -> list[types.TextContent]:
     return ok(updated)
 
 
-def _delete_activity(conn, args) -> list[types.TextContent]:
+def _delete_activity(conn, args) -> types.CallToolResult:
     aid = args["activity_id"]
     current = conn.execute("SELECT * FROM activities WHERE id=?", (aid,)).fetchone()
     if not current:
-        return ok({"error": f"Activity {aid} not found"})
+        return err(f"Activity {aid} not found")
 
     if args.get("permanent"):
         step_ids = [r["id"] for r in conn.execute(
@@ -1082,7 +705,7 @@ def _delete_activity(conn, args) -> list[types.TextContent]:
     try:
         events = transition(conn, "activity", aid, "skip", {"batch_id": batch})
     except ValueError as e:
-        return ok({"error": str(e)})
+        return err(str(e))
     result = react(conn, events, batch)
     conn.commit()
     return ok({
@@ -1121,7 +744,7 @@ def _restore_fields(conn, item_type, item_id, old_value):
     return [k for k in old_value if k != "status" and k in allowed]
 
 
-def _undo(conn, args) -> list[types.TextContent]:
+def _undo(conn, args) -> types.CallToolResult:
     item_type, item_id = args.get("item_type"), args.get("item_id")
     # Skip undo batches themselves (their summary entry has action='undo'):
     # reverting a reversal is undoing an undo, which is not supported
@@ -1138,14 +761,14 @@ def _undo(conn, args) -> list[types.TextContent]:
     q += " ORDER BY id DESC LIMIT 1"
     row = conn.execute(q, params).fetchone()
     if not row:
-        return ok({"error": "Nothing to undo (no batched operations found)"})
+        return err("Nothing to undo (no batched operations found)")
     batch = row["batch_id"]
 
     if conn.execute(
         "SELECT 1 FROM activity_log WHERE action='undo' AND json_extract(new_value, '$.undo_of')=?",
         (batch,),
     ).fetchone():
-        return ok({"error": f"Batch {batch} was already undone; undoing an undo is not supported"})
+        return err(f"Batch {batch} was already undone; undoing an undo is not supported")
 
     entries = [row_to_dict(e) for e in conn.execute(
         "SELECT * FROM activity_log WHERE batch_id=? ORDER BY id DESC", (batch,)).fetchall()]
@@ -1176,9 +799,9 @@ def _undo(conn, args) -> list[types.TextContent]:
             else:  # created / observation have no prior state to restore
                 skipped.append({"item_id": e["item_id"], "action": e["action"],
                                 "reason": f"'{e['action']}' entries are not reverted"})
-    except ValueError as err:
+    except ValueError as exc:
         conn.rollback()
-        return ok({"error": f"Undo failed, nothing changed: {err}"})
+        return err(f"Undo failed, nothing changed: {exc}")
 
     # Root entry (earliest in the batch) anchors the undo record
     root = entries[-1]
@@ -1194,13 +817,13 @@ def _undo(conn, args) -> list[types.TextContent]:
     })
 
 
-def _add_observation(conn, args) -> list[types.TextContent]:
-    oid = new_id()
+def _add_observation(conn, args) -> types.CallToolResult:
+    domain_id = args["domain_id"]
     log_change(
-        conn, "activity", oid, "observation",
+        conn, "domain", domain_id, "observation",
         None,
         {
-            "domain_id": args["domain_id"],
+            "domain_id": domain_id,
             "text": args["observation_text"],
             "affects": args.get("affects_activities", []),
         },
@@ -1214,13 +837,12 @@ def _add_observation(conn, args) -> list[types.TextContent]:
 
     conn.commit()
     return ok({
-        "observation_id": oid,
         "recorded": True,
         "affected_activities": affected,
     })
 
 
-def _get_upcoming(conn, days_ahead) -> list[types.TextContent]:
+def _get_upcoming(conn, days_ahead) -> types.CallToolResult:
     cutoff = (date.today() + timedelta(days=days_ahead)).isoformat()
     today_str = date.today().isoformat()
 
@@ -1257,7 +879,7 @@ def _get_upcoming(conn, days_ahead) -> list[types.TextContent]:
     return ok({"today": today_str, "cutoff": cutoff, "items": result})
 
 
-def _get_weather_current(conn, location) -> list[types.TextContent]:
+def _get_weather_current(conn, location) -> types.CallToolResult:
     latest = conn.execute(
         "SELECT * FROM weather_log WHERE location=? ORDER BY recorded_at DESC LIMIT 1",
         (location,),

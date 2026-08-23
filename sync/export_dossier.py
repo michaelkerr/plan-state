@@ -18,8 +18,7 @@ import os
 import sys
 from datetime import date, datetime
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from plansync import engine  # noqa: E402
+from plansync import engine
 
 DOMAINS_DIR = os.environ.get("PLANSYNC_DOMAINS_DIR", "/opt/data/plansync/domains")
 RECENT_DAYS = 14
@@ -180,7 +179,7 @@ def render_domain(conn, domain):
     add(f"## Observations (last {RECENT_DAYS} days)")
     obs = conn.execute(
         "SELECT timestamp, new_value FROM activity_log WHERE action='observation' "
-        "AND json_extract(new_value, '$.domain_id')=? AND timestamp >= datetime('now', ?) ORDER BY timestamp DESC",
+        "AND item_type='domain' AND item_id=? AND timestamp >= datetime('now', ?) ORDER BY timestamp DESC",
         (did, f"-{RECENT_DAYS} days"),
     ).fetchall()
     if obs:
@@ -230,8 +229,7 @@ def main():
     if not os.path.exists(engine.db_path()):
         print(f"Database not found at {engine.db_path()}", file=sys.stderr)
         return 1
-    conn = engine.get_db()
-    try:
+    with engine.connect() as conn:
         domains = conn.execute("SELECT * FROM domains ORDER BY name").fetchall()
         for d in domains:
             slug = slugify(d["name"])
@@ -243,8 +241,6 @@ def main():
                 f.write(content)
         print(f"exported {len(domains)} domain dossiers to {DOMAINS_DIR}/*/dossier.md", file=sys.stderr)
         return 0
-    finally:
-        conn.close()
 
 
 if __name__ == "__main__":

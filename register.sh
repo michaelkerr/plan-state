@@ -96,6 +96,8 @@ docker exec "$CONTAINER" python3 -c "import mcp" 2>/dev/null \
 docker exec "$CONTAINER" python3 -c "import requests" 2>/dev/null \
     && echo "  sync deps already installed" \
     || docker exec "$CONTAINER" /opt/hermes/.venv/bin/python3 -m pip install -q -r /opt/plansync/sync/requirements.txt
+docker exec "$CONTAINER" /opt/hermes/.venv/bin/python3 -m pip install -q -e /opt/plansync/
+echo "  plansync package installed"
 
 # ── 6. Register cron jobs ────────────────────────────────────
 echo "[6/6] Registering cron jobs..."

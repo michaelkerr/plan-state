@@ -12,9 +12,8 @@ from datetime import date, timedelta
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
 
-from plansync.engine import get_actionable_items  # noqa: E402
+from plansync.engine import get_actionable_items
 
 SCHEMA_PATH = os.path.join(ROOT, "schema.sql")
 MIGRATE_SCRIPT = os.path.join(ROOT, "scripts", "migrate-actionable-view.py")

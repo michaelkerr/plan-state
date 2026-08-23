@@ -11,8 +11,6 @@ import sys
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "mcp-server"))
-sys.path.insert(0, os.path.join(ROOT, "sync"))
 
 SCHEMA_PATH = os.path.join(ROOT, "schema.sql")
 
@@ -65,7 +63,7 @@ def call(fn, *args):
     conn = server.get_db()
     try:
         result = getattr(server, fn)(conn, *args)
-        return json.loads(result[0].text)
+        return json.loads(result.content[0].text)
     finally:
         conn.close()
 

@@ -13,8 +13,6 @@ from datetime import date, timedelta
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "mcp-server"))
-sys.path.insert(0, ROOT)
 
 SCHEMA_PATH = os.path.join(ROOT, "schema.sql")
 MIGRATE_SCRIPT = os.path.join(ROOT, "scripts", "migrate-undo-action.py")
@@ -40,7 +38,7 @@ def call(fn, args):
     import server
     conn = server.get_db()
     try:
-        return json.loads(getattr(server, fn)(conn, args)[0].text)
+        return json.loads(getattr(server, fn)(conn, args).content[0].text)
     finally:
         conn.close()
 
@@ -146,7 +144,6 @@ class TestUndoOtherOperations:
         assert snapshot(db) == before
 
     def test_undo_cron_trigger_fire(self, db):
-        sys.path.insert(0, os.path.join(ROOT, "sync"))
         import sync_pipeline
         yesterday = (TODAY - timedelta(days=1)).isoformat()
         db.execute(

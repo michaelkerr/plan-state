@@ -10,7 +10,6 @@ import sys
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "sync"))
 
 SCHEMA_PATH = os.path.join(ROOT, "schema.sql")
 
@@ -58,7 +57,7 @@ def db_path(tmp_path):
     # observation within window
     conn.execute(
         "INSERT INTO activity_log (item_type,item_id,action,new_value,source,timestamp) "
-        "VALUES ('activity','obs1','observation',?, 'claude', datetime('now','-1 day'))",
+        "VALUES ('domain','d1','observation',?, 'claude', datetime('now','-1 day'))",
         (json.dumps({"domain_id": "d1", "text": "Armyworms near the back fence", "affects": []}),),
     )
     # weather

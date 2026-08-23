@@ -10,10 +10,8 @@ import sys
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "mcp-server"))
-sys.path.insert(0, ROOT)
 
-from plansync.engine import slugify  # noqa: E402
+from plansync.engine import slugify
 
 SCHEMA_PATH = os.path.join(ROOT, "schema.sql")
 MIGRATE_SCRIPT = os.path.join(ROOT, "scripts", "migrate-ref-name.py")
@@ -38,7 +36,7 @@ def call(fn, args):
     import server
     conn = server.get_db()
     try:
-        return json.loads(getattr(server, fn)(conn, args)[0].text)
+        return json.loads(getattr(server, fn)(conn, args).content[0].text)
     finally:
         conn.close()
 

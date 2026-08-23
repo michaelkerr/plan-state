@@ -11,22 +11,25 @@ from datetime import date, datetime, timedelta, timezone
 
 try:
     import requests
-except ImportError:  # absent in test/tooling environments; required in the container
+except ImportError:
     requests = None
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from plansync import engine  # noqa: E402
+from plansync import engine
 
 OWM_KEY = os.environ.get("OPENWEATHERMAP_API_KEY", "")
 OUTPUT_DIR = os.environ.get("PLANSYNC_OUTPUT_DIR", "/opt/data/plansync/sync-output")
 
-TODAY = date.today()
-# Naive UTC, matching the format utcnow() produced (nothing reads these back)
-NOW = datetime.now(timezone.utc).replace(tzinfo=None)
+def _today():
+    return date.today()
+
+
+def _now():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class SyncSummary:
-    def __init__(self):
+    def __init__(self, today=None):
+        self.today = today or _today()
         self.triggers_fired = []
         self.dates_cascaded = []
         self.overdue = []
@@ -39,7 +42,7 @@ class SyncSummary:
 
     def to_dict(self):
         return {
-            "date": TODAY.isoformat(),
+            "date": self.today.isoformat(),
             "triggers_fired": self.triggers_fired,
             "dates_cascaded": self.dates_cascaded,
             "overdue": self.overdue,
@@ -47,16 +50,10 @@ class SyncSummary:
         }
 
     def to_stdout(self):
-        # Always emit something: cron output is delivered to Telegram, and an
-        # empty quiet day should still produce a heartbeat message. The
-        # heartbeat answers "did the machinery run" -- counts only; item
-        # detail belongs to the 6:15 briefing, which reads the full JSON
-        # summary. A run with errors must never claim clean, and errors stay
-        # itemized (first line each).
         if self.is_empty() and not self.errors:
-            return f"Plan sync {TODAY.isoformat()}: ran clean, no changes."
+            return f"Plan sync {self.today.isoformat()}: ran clean, no changes."
         lines = [
-            f"Plan sync {TODAY.isoformat()}: triggers fired {len(self.triggers_fired)}, "
+            f"Plan sync {self.today.isoformat()}: triggers fired {len(self.triggers_fired)}, "
             f"dates cascaded {len(self.dates_cascaded)}, overdue {len(self.overdue)}"
         ]
         if self.errors:
@@ -99,24 +96,26 @@ def derive_daily_range(current_temp, forecast_data, now_utc):
     return max(temps), min(temps)
 
 
-def pull_weather(conn, summary=None):
+def pull_weather(conn, summary=None, today=None, now=None):
     """Stage 1: refresh today's weather row per location.
 
     Returns {"pulled": [{location, temp_high, temp_low}], "errors": [...]}.
     Skippable: later stages read weather_log, not this result."""
+    today = today or _today()
+    now = now or _now()
     result = {"pulled": [], "errors": []}
     if not OWM_KEY:
         result["errors"].append("OPENWEATHERMAP_API_KEY not set, skipping weather pull")
     elif requests is None:
         result["errors"].append("requests not installed, skipping weather pull")
     else:
-        _pull_weather_locations(conn, result)
+        _pull_weather_locations(conn, result, today, now)
     if summary is not None:
         summary.errors.extend(result["errors"])
     return result
 
 
-def _pull_weather_locations(conn, result):
+def _pull_weather_locations(conn, result, today, now):
     locations = conn.execute("SELECT DISTINCT location FROM domains WHERE location IS NOT NULL").fetchall()
     for row in locations:
         loc = row["location"]
@@ -138,18 +137,18 @@ def _pull_weather_locations(conn, result):
             fdata = forecast.json()
 
             current_temp = cdata.get("main", {}).get("temp")
-            temp_high, temp_low = derive_daily_range(current_temp, fdata, NOW)
+            temp_high, temp_low = derive_daily_range(current_temp, fdata, now)
             weather_desc = cdata.get("weather", [{}])[0].get("main", "")
             rain = cdata.get("rain", {}).get("1h", 0) or 0
             precip_inches = rain * 0.03937
 
-            upsert_weather_row(conn, loc, temp_high, temp_low, weather_desc, precip_inches, json.dumps(fdata))
+            upsert_weather_row(conn, loc, today, temp_high, temp_low, weather_desc, precip_inches, json.dumps(fdata))
             result["pulled"].append({"location": loc, "temp_high": temp_high, "temp_low": temp_low})
         except Exception as e:
             result["errors"].append(f"Weather pull failed for {loc}: {e}")
 
 
-def upsert_weather_row(conn, loc, temp_high, temp_low, conditions, precipitation, forecast_json):
+def upsert_weather_row(conn, loc, today, temp_high, temp_low, conditions, precipitation, forecast_json):
     """One weather row per location per local day, enforced by
     UNIQUE(location, weather_date). A second run the same day (duplicate cron
     fire, manual verification) refreshes the row instead of inserting --
@@ -161,17 +160,19 @@ def upsert_weather_row(conn, loc, temp_high, temp_low, conditions, precipitation
              temp_high=excluded.temp_high, temp_low=excluded.temp_low,
              conditions=excluded.conditions, precipitation=excluded.precipitation,
              forecast_json=excluded.forecast_json, recorded_at=CURRENT_TIMESTAMP""",
-        (loc, TODAY.isoformat(), temp_high, temp_low, conditions, precipitation, forecast_json),
+        (loc, today.isoformat(), temp_high, temp_low, conditions, precipitation, forecast_json),
     )
 
 
 # ── Step 2: Condition Evaluation ─────────────────────────────
 
-def evaluate_conditions(conn, summary=None):
+def evaluate_conditions(conn, summary=None, today=None, now=None):
     """Stage 2: refresh the conditions evaluation cache from weather_log.
 
     Returns {"evaluated": n, "met": m}. Reads weather already in the DB --
     pull_weather need not have run this process."""
+    today = today or _today()
+    now = now or _now()
     result = {"evaluated": 0, "met": 0}
     conditions = conn.execute(
         "SELECT c.*, a.domain_id FROM conditions c JOIN activities a ON c.activity_id = a.id WHERE a.status = 'watching'"
@@ -194,13 +195,13 @@ def evaluate_conditions(conn, summary=None):
         elif ctype == "weather_event" and location:
             is_met, current_value = _eval_weather_event(conn, location, cdef)
         elif ctype == "calendar":
-            is_met, current_value = _eval_calendar(cdef)
+            is_met, current_value = _eval_calendar(cdef, today)
         elif ctype == "dependency":
             is_met, current_value = _eval_dependency(conn, cdef)
 
         conn.execute(
             "UPDATE conditions SET current_value=?, is_met=?, last_checked=? WHERE id=?",
-            (current_value, is_met, NOW.isoformat(), cond["id"]),
+            (current_value, is_met, now.isoformat(), cond["id"]),
         )
         result["evaluated"] += 1
         if is_met:
@@ -252,12 +253,13 @@ def _eval_weather_event(conn, location, cdef):
     return event.lower() in current.lower(), None
 
 
-def _eval_calendar(cdef):
+def _eval_calendar(cdef, today=None):
+    today = today or _today()
     target = cdef.get("date") or cdef.get("after")
     if not target:
         return False, None
     target_date = date.fromisoformat(target)
-    return TODAY >= target_date, (TODAY - target_date).days
+    return today >= target_date, (today - target_date).days
 
 
 def _eval_dependency(conn, cdef):
@@ -275,10 +277,12 @@ def _eval_dependency(conn, cdef):
 
 # ── Step 3: Trigger Evaluation ───────────────────────────────
 
-def evaluate_triggers(conn, summary=None):
+def evaluate_triggers(conn, summary=None, today=None, now=None):
     """Stage 3: fire watching triggers via the state machine.
 
     Returns {"fired": [{name, reason, time}], "dates_cascaded": [...]}."""
+    today = today or _today()
+    now = now or _now()
     result = {"fired": [], "dates_cascaded": []}
     watching = conn.execute(
         "SELECT * FROM activities WHERE status = 'watching'"
@@ -289,15 +293,13 @@ def evaluate_triggers(conn, summary=None):
         if not tdef:
             continue
 
-        fired, reason = _check_trigger(conn, act, tdef)
+        fired, reason = _check_trigger(conn, act, tdef, today)
         if fired:
-            # One batch per fire: the status change and its step-date cascade
-            # revert together
             batch = engine.new_batch_id()
-            trigger_date = act["trigger_date"] or TODAY.isoformat()
+            trigger_date = act["trigger_date"] or today.isoformat()
             conn.execute(
                 "UPDATE activities SET trigger_fired=?, trigger_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                (NOW.isoformat(), trigger_date, act["id"]),
+                (now.isoformat(), trigger_date, act["id"]),
             )
             engine.transition(conn, "activity", act["id"], "trigger_fire",
                               {"source": "cron", "batch_id": batch,
@@ -306,10 +308,10 @@ def evaluate_triggers(conn, summary=None):
                                "old_extra": {"trigger_date": act["trigger_date"]}})
 
             if trigger_date:
-                _cascade_steps(conn, act["id"], trigger_date, result["dates_cascaded"], batch_id=batch)
+                _cascade_steps(conn, act["id"], trigger_date, result["dates_cascaded"], batch_id=batch, now=now)
 
             result["fired"].append({"name": act["name"], "reason": reason,
-                                    "time": NOW.isoformat()})
+                                    "time": now.isoformat()})
 
     if summary is not None:
         summary.triggers_fired.extend(result["fired"])
@@ -317,7 +319,8 @@ def evaluate_triggers(conn, summary=None):
     return result
 
 
-def _check_trigger(conn, act, tdef):
+def _check_trigger(conn, act, tdef, today=None):
+    today = today or _today()
     ttype = tdef.get("type")
 
     if ttype == "calendar":
@@ -329,12 +332,11 @@ def _check_trigger(conn, act, tdef):
                 (act["id"],),
             ).fetchone()["m"] or 0
             prep_start = target_date - timedelta(days=max_prep)
-            if TODAY >= prep_start:
+            if today >= prep_start:
                 return True, f"calendar: prep window opened (target {target})"
             return False, ""
-        # "after" is a compound gate: earliest allowed date, no prep-window offset
         after = tdef.get("after")
-        if after and TODAY >= date.fromisoformat(after):
+        if after and today >= date.fromisoformat(after):
             return True, f"calendar: after {after}"
         return False, ""
 
@@ -365,7 +367,7 @@ def _check_trigger(conn, act, tdef):
         results = []
         reasons = []
         for sub in subs:
-            fired, reason = _check_trigger(conn, act, sub)
+            fired, reason = _check_trigger(conn, act, sub, today)
             results.append(fired)
             if fired:
                 reasons.append(reason)
@@ -378,22 +380,24 @@ def _check_trigger(conn, act, tdef):
     return False, ""
 
 
-def _cascade_steps(conn, activity_id, trigger_date_str, collector, batch_id=None):
+def _cascade_steps(conn, activity_id, trigger_date_str, collector, batch_id=None, now=None):
+    now = now or _now()
     engine.cascade_step_dates(
         conn, activity_id, trigger_date_str, source="cron", batch_id=batch_id,
         on_change=lambda s, old_due, new_due: collector.append(
             {"name": s["name"], "old_date": old_due, "new_date": new_due,
-             "time": NOW.isoformat()}),
+             "time": now.isoformat()}),
     )
 
 
 # ── Step 4: Date Re-cascade ─────────────────────────────────
 
-def cascade_dates(conn, summary=None):
+def cascade_dates(conn, summary=None, now=None):
     """Stage 4: re-estimate condition-trigger dates from forecasts and
     cascade step dates from any moved estimate.
 
     Returns {"dates_cascaded": [...]}."""
+    now = now or _now()
     result = {"dates_cascaded": []}
     watching = conn.execute(
         "SELECT a.*, d.location FROM activities a JOIN domains d ON a.domain_id=d.id WHERE a.status='watching' AND a.trigger_type='condition'"
@@ -411,15 +415,12 @@ def cascade_dates(conn, summary=None):
             conn.execute("UPDATE activities SET trigger_date=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (estimated, act["id"]))
             engine.log_change(conn, "activity", act["id"], "date_cascade",
                         {"trigger_date": old_date}, {"trigger_date": estimated}, source="cron")
-            _cascade_steps(conn, act["id"], estimated, result["dates_cascaded"])
+            _cascade_steps(conn, act["id"], estimated, result["dates_cascaded"], now=now)
 
     if summary is not None:
         summary.dates_cascaded.extend(result["dates_cascaded"])
     return result
 
-
-# Pre-Step-48 name; the stage was renamed to match what it does
-reestimate_dates = cascade_dates
 
 
 def _estimate_trigger_date(conn, location, tdef):
@@ -484,28 +485,27 @@ def _estimate_trigger_date(conn, location, tdef):
 
 # ── Step 5: Overdue Check ────────────────────────────────────
 
-def check_overdue(conn, summary=None):
+def check_overdue(conn, summary=None, today=None):
     """Stage 5: promote pending steps past their due date to 'due'.
 
     Returns {"overdue": [{name, due_date}]} -- everything still overdue,
     both newly promoted and already 'due'."""
+    today = today or _today()
     result = {"overdue": []}
     overdue = conn.execute(
-        """SELECT s.*, a.name as activity_name FROM steps s
-           JOIN activities a ON s.activity_id = a.id
-           WHERE s.status IN ('pending','due') AND s.due_date < ? AND s.due_date IS NOT NULL
-             AND a.status IN ('watching','preparing','active')""",
-        (TODAY.isoformat(),),
+        """SELECT * FROM open_steps
+           WHERE due_date < ? AND due_date IS NOT NULL
+             AND activity_status IN ('watching','preparing','active')""",
+        (today.isoformat(),),
     ).fetchall()
 
-    # One batch for the whole overdue pass: the day's promotions revert together
     batch = engine.new_batch_id()
     for s in overdue:
-        if s["status"] != "due":
-            engine.transition(conn, "step", s["id"], "overdue",
+        if s["step_status"] != "due":
+            engine.transition(conn, "step", s["step_id"], "overdue",
                               {"source": "cron", "batch_id": batch})
         result["overdue"].append({
-            "name": f'{s["activity_name"]}: {s["name"]}',
+            "name": f'{s["activity_name"]}: {s["step_name"]}',
             "due_date": s["due_date"],
         })
 
@@ -516,9 +516,11 @@ def check_overdue(conn, summary=None):
 
 # ── Step 6: Summary Output ──────────────────────────────────
 
-def save_output(summary):
+def save_output(summary, today=None, now=None):
+    today = today or _today()
+    now = now or _now()
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    path = os.path.join(OUTPUT_DIR, f"{TODAY.isoformat()}.json")
+    path = os.path.join(OUTPUT_DIR, f"{today.isoformat()}.json")
     out = summary.to_dict()
 
     # Hourly runs share one daily file: event lists accumulate (each entry
@@ -537,7 +539,7 @@ def save_output(summary):
         out["runs"] = prior.get("runs", 1) + 1
     else:
         out["runs"] = 1
-    out["last_run"] = NOW.isoformat()
+    out["last_run"] = now.isoformat()
 
     with open(path, "w") as f:
         json.dump(out, f, indent=2, default=str)
@@ -550,31 +552,30 @@ def main():
         print(f"Database not found at {engine.db_path()}", file=sys.stderr)
         sys.exit(1)
 
-    summary = SyncSummary()
-    conn = engine.get_db()
+    today = _today()
+    now = _now()
+    summary = SyncSummary(today=today)
+    with engine.connect() as conn:
+        try:
+            pull_weather(conn, summary, today=today, now=now)
+            conn.commit()
 
-    try:
-        pull_weather(conn, summary)
-        conn.commit()
+            evaluate_conditions(conn, summary, today=today, now=now)
+            conn.commit()
 
-        evaluate_conditions(conn, summary)
-        conn.commit()
+            evaluate_triggers(conn, summary, today=today, now=now)
+            conn.commit()
 
-        evaluate_triggers(conn, summary)
-        conn.commit()
+            cascade_dates(conn, summary, now=now)
+            conn.commit()
 
-        cascade_dates(conn, summary)
-        conn.commit()
+            check_overdue(conn, summary, today=today)
+            conn.commit()
 
-        check_overdue(conn, summary)
-        conn.commit()
-
-        save_output(summary)
-    except Exception as e:
-        summary.errors.append(f"Fatal: {e}")
-        conn.rollback()
-    finally:
-        conn.close()
+            save_output(summary, today=today, now=now)
+        except Exception as e:
+            summary.errors.append(f"Fatal: {e}")
+            conn.rollback()
 
     stdout = summary.to_stdout()
     if stdout:

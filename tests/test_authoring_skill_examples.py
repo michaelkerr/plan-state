@@ -4,20 +4,15 @@ against the server's actual validators (Step 14). If validation rules change
 examples are updated to match -- the skill must never teach a format the
 tools reject."""
 
-import importlib.util
 import json
 import os
 import re
 import unittest
 
+from plansync.authoring import validate_activities, validate_domain_definition
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKILL_PATH = os.path.join(ROOT, "skills", "domain-authoring.md")
-
-spec = importlib.util.spec_from_file_location(
-    "server", os.path.join(ROOT, "mcp-server", "server.py")
-)
-server = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(server)
 
 
 def read_skill():
@@ -46,7 +41,7 @@ class TestSkillExamples(unittest.TestCase):
         ]
         self.assertGreaterEqual(len(domains), 1, "skill must contain a complete domain example")
         for defn in domains:
-            errors = server._validate_domain_definition(defn)
+            errors = validate_domain_definition(defn)
             self.assertEqual(errors, [], f"create example '{defn['name']}' fails validation: {errors}")
 
     def test_amend_mode_example_validates(self):
@@ -57,7 +52,7 @@ class TestSkillExamples(unittest.TestCase):
         activities = json.loads(m.group(1))
         self.assertGreaterEqual(len(activities), 3, "amend example should show a multi-activity chain")
 
-        errors = server._validate_activities(activities, [], existing_names={"Bed Prep S1"})
+        errors = validate_activities(activities, [], existing_names={"Bed Prep S1"})
         self.assertEqual(errors, [], f"amend example fails validation: {errors}")
 
     def test_amend_example_is_grouped_dependency_chain(self):
@@ -86,7 +81,7 @@ class TestSkillExamples(unittest.TestCase):
             "trigger_type": "dependency",
             "trigger_def": {"type": "dependency", "activity_ref": "Bed Prep S1", "event": "completed"},
         }]
-        errors = server._validate_activities(batch, [], existing_names={"Bed Prep S1"})
+        errors = validate_activities(batch, [], existing_names={"Bed Prep S1"})
         self.assertEqual(errors, [])
 
 

@@ -4,16 +4,14 @@
 import json
 import os
 import sqlite3
-import sys
 from datetime import date, timedelta
 
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
 
-from plansync import engine  # noqa: E402
-from plansync.engine import transition, react, new_batch_id  # noqa: E402
+from plansync import engine
+from plansync.engine import transition, react, new_batch_id
 
 SCHEMA_PATH = os.path.join(ROOT, "schema.sql")
 TODAY = date.today()

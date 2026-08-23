@@ -4,13 +4,11 @@
 import json
 import os
 import sqlite3
-import sys
 import tempfile
 
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "mcp-server"))
 
 SCHEMA_PATH = os.path.join(ROOT, "schema.sql")
 EXAMPLES_DIR = os.path.join(ROOT, "examples")
@@ -52,7 +50,7 @@ def call_load_domain(definition):
     conn = server.get_db()
     try:
         result = server._load_domain(conn, {"definition": definition})
-        text = result[0].text
+        text = result.content[0].text
         return json.loads(text)
     finally:
         conn.close()

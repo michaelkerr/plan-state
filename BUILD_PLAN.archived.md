@@ -1,4 +1,8 @@
-# Build Plan
+# Build Plan (Archived)
+
+This project has graduated to ROADMAP.md for ongoing work management.
+This file is preserved as a historical record of the v2 build sequence (16 steps).
+v1 build history (33 steps) is in docs/archive/BUILD_PLAN_V1.md.
 
 ## Product summary
 

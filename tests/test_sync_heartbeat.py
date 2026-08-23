@@ -6,12 +6,6 @@ Step 32 (quiet): the heartbeat carries counts only -- item names belong to
 the 6:15 briefing, which reads the full JSON summary. Errors stay itemized.
 """
 
-import os
-import sys
-
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "sync"))
-
 import sync_pipeline
 
 

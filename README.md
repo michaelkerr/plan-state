@@ -53,13 +53,15 @@ docker exec -it reach-gateway hermes chat -q 'Use the plansync tools to list dom
 
 - **SQLite plan store**: domains, activities, steps, condition cache, weather log, and a source-attributed activity log
 - **MCP server**: tools for reading and writing plan state (load/amend domains, update/complete/defer activities, record observations, query upcoming items and weather); shared by Hermes and Claude as peer agents, with writes attributed per client (see `docs/claude-setup.md`)
-- **Daily sync pipeline**: deterministic script -- weather pull, condition evaluation, trigger evaluation, date re-estimation, overdue check, summary output
+- **Hourly sync pipeline**: deterministic five-stage pipeline -- weather pull, condition evaluation, trigger firing, date cascade, overdue promotion. Zero LLM tokens.
+- **State machines**: all status changes route through transition tables with a cascade reactor; batch-grouped operations support undo
 - **Morning briefing**: LLM-generated daily briefing from sync output (includes recent field observations)
 - **Evening nudge**: deterministic reminder of anything still open today; silent on clear days
-- **Dossier export**: per-domain markdown state files (`/opt/data/plansync/domains/{slug}/dossier.md`), regenerated daily, so sessions without MCP access can orient instantly
+- **Dossier export**: per-domain markdown state files (`/opt/data/plansync/domains/{slug}/dossier.md`), regenerated hourly, so sessions without MCP access can orient instantly
+- **Declarative plan sync**: load_domain diffs declarations against DB state, creates/updates/flags without auto-deleting
 - **Registration script**: One-command install into a running Hermes instance
 
-See [BUILD_PLAN.md](BUILD_PLAN.md) for current status and next steps.
+See [ROADMAP.md](ROADMAP.md) for current priorities and [ARCHITECTURE.md](ARCHITECTURE.md) for how the system fits together.
 
 ## Product decisions
 
@@ -83,7 +85,7 @@ Hermes Agent (Docker) ──── MCP ────► plan-state MCP server ─
     │                                                              ▲
     │ cron 6:00 AM                                                 │
     ▼                                                              │
-daily_sync.py ─── Weather API ──► condition eval ──► trigger ──► cascade
+sync_pipeline.py ── Weather API ──► condition eval ──► trigger ──► cascade
     │
     │ cron 6:15 AM
     ▼
@@ -94,6 +96,14 @@ briefing-context.py ──► LLM ──► Telegram briefing
 evening_nudge.py ──► "still open today" ──► Telegram (silent if clear)
 ```
 
-## Future direction
+## Development
 
-v1 is the target architecture. A more elaborate v2 design (federated signal/boundary agents) is archived at `docs/archive/v2-signals-boundaries-prd.md` -- revisit only if a full season of operation surfaces a concrete limitation of the current model.
+```bash
+# Run tests
+python3 -m pytest tests/ -q
+
+# Run a single sync stage locally (requires PLANSYNC_DB set)
+PLANSYNC_DB=path/to/test.db python3 -c "from sync.sync_pipeline import check_overdue; ..."
+```
+
+See [ROADMAP.md](ROADMAP.md) for current priorities, [ARCHITECTURE.md](ARCHITECTURE.md) for the system map, and [DECISIONS.md](DECISIONS.md) for the architectural decision log. The initial build history (49 steps) is archived in [BUILD_PLAN.archived.md](BUILD_PLAN.archived.md) and [docs/archive/BUILD_PLAN_V1.md](docs/archive/BUILD_PLAN_V1.md).

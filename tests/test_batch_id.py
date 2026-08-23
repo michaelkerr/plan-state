@@ -10,9 +10,8 @@ import uuid
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
 
-from plansync.engine import log_change  # noqa: E402
+from plansync.engine import log_change
 
 SCHEMA_PATH = os.path.join(ROOT, "schema.sql")
 MIGRATE_SCRIPT = os.path.join(ROOT, "scripts", "migrate-batch-id.py")

@@ -4,12 +4,10 @@ there is nothing due. Replaces Todoist's due-time reminder function."""
 
 import os
 import sqlite3
-import sys
 
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "sync"))
 
 import evening_nudge
 

@@ -5,14 +5,11 @@ engine.transition() -- same state machine as the MCP server."""
 import json
 import os
 import sqlite3
-import sys
 from datetime import date, timedelta
 
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "sync"))
-sys.path.insert(0, ROOT)
 
 SCHEMA_PATH = os.path.join(ROOT, "schema.sql")
 TODAY = date.today()

@@ -6,6 +6,7 @@ import json
 import os
 import sqlite3
 import uuid
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 
 DEFAULT_DB_PATH = "/opt/data/plansync/plansync.db"
@@ -24,6 +25,15 @@ def get_db():
     conn.execute("PRAGMA busy_timeout=5000")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
+
+
+@contextmanager
+def connect():
+    conn = get_db()
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 def row_to_dict(row):
@@ -227,8 +237,11 @@ _ENTITIES = {
 }
 
 
-def new_batch_id():
+def new_id():
     return uuid.uuid4().hex[:12]
+
+
+new_batch_id = new_id
 
 
 def slugify(name):
