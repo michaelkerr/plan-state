@@ -58,8 +58,9 @@ plan-state/
 │   └── requirements.txt        # mcp>=1.0.0
 ├── sync/
 │   ├── sync_pipeline.py        # Hourly deterministic pipeline (5 independent stages)
+│   ├── morning_briefing.py     # 6:15 AM deterministic briefing (today/overdue/week/conditions/weather)
 │   ├── evening_nudge.py        # 5 PM "still open today" (silent when clear)
-│   ├── briefing_context.py     # 6:15 AM briefing data for LLM skill
+│   ├── briefing_context.py     # Older LLM-mediated briefing (replaced by morning_briefing.py)
 │   ├── export_dossier.py       # Per-domain markdown state files
 │   ├── export_domain_json.py   # DB → re-importable domain JSON
 │   └── requirements.txt        # requests
@@ -92,6 +93,7 @@ plan-state/
 - **Weather evaluation**: sync/sync_pipeline.py — pull_weather(), evaluate_conditions(), _eval_temperature(), _eval_weather_event(). Temperature sustained-days logic in _eval_temperature().
 - **Trigger logic**: sync/sync_pipeline.py — evaluate_triggers(), _check_trigger(). Recursive for compound triggers. Calendar triggers fire at prep-window start (target - max_prep_lead_days).
 - **View layer**: schema.sql — open_steps, actionable_items, open_activities views. engine.py — get_actionable_items(), get_open_activities(). Used by nudge, briefing, and get_upcoming.
+- **Morning briefing**: sync/morning_briefing.py — build_briefing(). Six sections: fires, today, overdue (bundled by activity, capped at MAX_OVERDUE), this week (capped per domain), conditions, weather. Deterministic, zero LLM tokens.
 - **Dossier export**: sync/export_dossier.py — render_domain(), render_rotation(). Reads rotation.json for garden-year position.
 - **Cron wrappers**: scripts/ — thin delegators copied into /opt/data/scripts/ by register.sh. The actual logic is in sync/ (volume-mounted, live-editable).
 

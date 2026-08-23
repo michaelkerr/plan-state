@@ -5,10 +5,11 @@ skill pipeline that suffered from stale-data hallucination and phantom completio
 
 Sections:
 1. What happened since yesterday (trigger fires, completions)
-2. Today's priorities (due today or overdue)
-3. This week (next 7 days)
-4. Conditions watch (active condition-triggered activities)
-5. Weather (today's forecast)
+2. Today (steps due today)
+3. Overdue (bundled by activity, capped)
+4. This week (next 7 days, capped per domain)
+5. Conditions watch (active condition-triggered activities)
+6. Weather (today's forecast)
 
 Prints a heartbeat even when all clear — the daily message confirms the system ran.
 """
@@ -25,14 +26,14 @@ WEEK_CUTOFF = (date.today() + timedelta(days=7)).isoformat()
 WEEKDAY = date.today().strftime("%A")
 DATE_DISPLAY = date.today().strftime("%B %-d")
 MAX_WEEK_PER_DOMAIN = 4
+MAX_OVERDUE = 5
 
 
-def _label(domain, group, name):
-    return f"{domain} — {group}: {name}" if group else f"{domain} — {name}"
+def _short_date(iso_date):
+    return date.fromisoformat(iso_date).strftime("%b %-d")
 
 
 def _section_fires(conn):
-    """Trigger fires and completions in the last 24 hours."""
     fires = conn.execute(
         """SELECT a.name as activity, a.group_name, d.name as domain,
                   json_extract(l.new_value, '$.reason') as reason
@@ -58,37 +59,66 @@ def _section_fires(conn):
 
     lines = []
     for f in fires:
-        label = _label(f["domain"], f["group_name"], f["activity"])
         reason = f["reason"] or "triggered"
-        lines.append(f"- {label} — {reason}")
+        lines.append(f"- {f['activity']} — {reason}")
     for c in completions:
-        label = _label(c["domain"], c["group_name"], c["activity"])
-        lines.append(f"- {label} — completed")
+        lines.append(f"- {c['activity']} — completed")
 
     if not lines:
         return None
-    return "**What happened since yesterday**\n" + "\n".join(lines)
+    return "**What happened**\n" + "\n".join(lines)
 
 
-def _section_due(conn):
-    """Steps due today or overdue."""
+def _section_today(conn):
     items = engine.get_actionable_items(conn, as_of_date=TODAY)
-    if not items:
+    today_items = [s for s in items if s["due_date"] == TODAY]
+    if not today_items:
         return None
 
     lines = []
-    for s in items:
-        name = f'{s["activity_name"]}: {s["step_name"]}'
-        label = _label(s["domain_name"], s["group_name"], name)
-        if s["due_date"] == TODAY:
-            lines.append(f"- {label} (due today)")
+    for s in today_items:
+        lines.append(f"- {s['activity_name']}: {s['step_name']}")
+    return f"**Today ({len(today_items)})**\n" + "\n".join(lines)
+
+
+def _section_overdue(conn):
+    items = engine.get_actionable_items(conn, as_of_date=TODAY)
+    overdue = [s for s in items if s["due_date"] < TODAY]
+    if not overdue:
+        return None
+
+    by_activity = {}
+    for s in overdue:
+        aid = s["activity_id"]
+        if aid not in by_activity:
+            by_activity[aid] = {
+                "activity_name": s["activity_name"],
+                "steps": [],
+                "earliest": s["due_date"],
+            }
+        by_activity[aid]["steps"].append(s["step_name"])
+        if s["due_date"] < by_activity[aid]["earliest"]:
+            by_activity[aid]["earliest"] = s["due_date"]
+
+    entries = []
+    for info in by_activity.values():
+        dt = _short_date(info["earliest"])
+        if len(info["steps"]) == 1:
+            entries.append(f"- {info['activity_name']}: {info['steps'][0]} (due {dt})")
         else:
-            lines.append(f"- {label} (overdue, due {s['due_date']})")
-    return "**Today**\n" + "\n".join(lines)
+            entries.append(
+                f"- {info['activity_name']}: {len(info['steps'])} steps (due {dt})"
+            )
+
+    total = len(overdue)
+    shown = entries[:MAX_OVERDUE]
+    if len(entries) > MAX_OVERDUE:
+        remaining = len(entries) - MAX_OVERDUE
+        shown.append(f"- …and {remaining} more")
+    return f"**Overdue ({total})**\n" + "\n".join(shown)
 
 
 def _section_week(conn):
-    """Steps and activities coming up in the next 7 days."""
     week_steps = [
         s for s in engine.get_actionable_items(conn, as_of_date=WEEK_CUTOFF)
         if s["due_date"] > TODAY
@@ -104,15 +134,15 @@ def _section_week(conn):
     by_domain = {}
     for s in week_steps:
         d = s["domain_name"]
-        name = f'{s["activity_name"]}: {s["step_name"]}'
-        label = _label(d, s["group_name"], name)
-        by_domain.setdefault(d, []).append(f"- {label} ({s['due_date']})")
+        line = f"- {s['activity_name']}: {s['step_name']} ({_short_date(s['due_date'])})"
+        by_domain.setdefault(d, []).append(line)
 
     for a in week_acts:
         d = a["domain_name"]
-        label = _label(d, a["group_name"], a["activity_name"])
-        by_domain.setdefault(d, []).append(f"- {label} ({a['trigger_date']})")
+        line = f"- {a['activity_name']} ({_short_date(a['trigger_date'])})"
+        by_domain.setdefault(d, []).append(line)
 
+    total = sum(len(v) for v in by_domain.values())
     lines = []
     for domain in sorted(by_domain):
         items = by_domain[domain]
@@ -121,13 +151,12 @@ def _section_week(conn):
         else:
             lines.extend(items[:MAX_WEEK_PER_DOMAIN - 1])
             remaining = len(items) - (MAX_WEEK_PER_DOMAIN - 1)
-            lines.append(f"- {domain}: {remaining} more this week — ask for the list.")
+            lines.append(f"- {domain}: {remaining} more this week")
 
-    return "**This week**\n" + "\n".join(lines)
+    return f"**This week ({total})**\n" + "\n".join(lines)
 
 
 def _section_conditions(conn):
-    """Active condition-triggered watches with current values."""
     cutoff = (date.today() + timedelta(days=45)).isoformat()
     rows = conn.execute(
         """SELECT a.name as activity, a.group_name, d.name as domain,
@@ -153,7 +182,6 @@ def _section_conditions(conn):
         if not clauses:
             continue
 
-        label = _label(r["domain"], r["group_name"], r["activity"])
         status_tag = "active" if r["activity_status"] == "active" else "watching"
         threshold_parts = []
         for c in clauses:
@@ -166,15 +194,14 @@ def _section_conditions(conn):
                 part += f" for {days}d"
             threshold_parts.append(part)
         threshold = ", ".join(threshold_parts)
-        lines.append(f"- {label} [{status_tag}] — {threshold}")
+        lines.append(f"- {r['activity']} [{status_tag}] — {threshold}")
 
     if not lines:
         return None
-    return "**Conditions watch**\n" + "\n".join(lines)
+    return "**Conditions**\n" + "\n".join(lines)
 
 
 def _extract_condition_clauses(tdef):
-    """Pull condition clauses from a trigger_def (handles compound nesting)."""
     if tdef.get("type") == "condition":
         return tdef.get("all", [])
     if tdef.get("type") == "compound":
@@ -186,7 +213,6 @@ def _extract_condition_clauses(tdef):
 
 
 def _section_weather(conn):
-    """Today's weather in one line per location."""
     rows = conn.execute(
         """SELECT location, temp_high, temp_low, conditions, precipitation
            FROM weather_log
@@ -214,7 +240,8 @@ def build_briefing(conn):
 
     sections = [
         _section_fires(conn),
-        _section_due(conn),
+        _section_today(conn),
+        _section_overdue(conn),
         _section_week(conn),
         _section_conditions(conn),
         _section_weather(conn),
@@ -224,8 +251,8 @@ def build_briefing(conn):
     if not active:
         weather = _section_weather(conn)
         if weather:
-            return f"{header}\n\nAll quiet — nothing due today, nothing new this week.\n\n{weather}"
-        return f"{header}\n\nAll quiet — sync ran clean, nothing due today, nothing new this week."
+            return f"{header}\n\nAll quiet — nothing due today.\n\n{weather}"
+        return f"{header}\n\nAll quiet — nothing due today."
 
     return header + "\n\n" + "\n\n".join(active)
 

@@ -17,13 +17,9 @@ PlanSync is a condition-aware activity orchestrator for personal life domains �
 
 ## Now
 
-### Briefing verbosity
+### Briefing verbosity — DONE
 - **Type**: improvement
-- **What it does**: The morning briefing is too verbose. The problem likely originates upstream — plans have too many activities/steps for what's actually useful day-to-day, and the briefing context dumps everything into LLM prompt without filtering for signal. Diagnose where the noise comes from (plan bloat vs. context dump vs. LLM summarization) and fix the root cause.
-- **Done when**: Morning briefing consistently fits in a quick phone-screen read. Only items that need attention today or this week appear.
-- **Touches**: sync/briefing_context.py, skills/plansync-briefing.md, possibly the domain definitions in /opt/data/plansync/domains/
-- **Risk**: Trimming context may cause the briefing to miss items the user cares about. Test with real domain data before deploying.
-- **Notes**:
+- **Notes**: Root cause was the `_section_due` function mixing overdue and today items with no bundling or cap, plus verbose `Domain — Group: Activity: Step` labels. Fixed by splitting into `_section_today` (today only) and `_section_overdue` (bundled by activity, capped at 5). Dropped domain/group prefix; switched to short dates (Aug 5). Production output went from ~25 verbose lines to ~18 compact lines. 13 new tests.
 
 ### Easier completions
 - **Type**: improvement
@@ -37,9 +33,16 @@ PlanSync is a condition-aware activity orchestrator for personal life domains �
 - **Type**: infrastructure
 - **Notes**: Published as interactive artifact. Component map with click-for-details, daily cron timeline, four expandable data-flow walkthroughs (sync, completion, authoring, undo). Dark-mode aware. https://claude.ai/code/artifact/9908c269-1654-4c07-a218-a8bd0e4e1974
 
+### Plan audit and trim
+- **Type**: improvement
+- **What it does**: Review the three live domain definitions for activities/steps that are noise. Too many items make the briefing verbose and the completion list overwhelming. Trim or consolidate.
+- **Done when**: Each domain has only activities/steps that are genuinely useful day-to-day. No "fire and forget" items cluttering the overdue list.
+- **Touches**: Domain definitions in /opt/data/plansync/domains/, MCP tools (complete/defer/delete_activity)
+- **Risk**: Deleting an activity the user actually wants. Confirm before removing.
+- **Notes**:
+
 ## Next
 
-- **Plan audit and trim** (improvement): Review the three live domain definitions for activities/steps that are noise. Too many items make the briefing verbose and the completion list overwhelming. Trim or consolidate.
 - **Calendar/timeline view** (feature): A visual view of upcoming activities across domains — calendar or timeline format. Probably a published artifact reading from dossier or DB export.
 - **Completion from nudge** (improvement): The evening nudge lists open items but offers no fast path to close them. Add inline completion suggestions or a numbered shorthand.
 
