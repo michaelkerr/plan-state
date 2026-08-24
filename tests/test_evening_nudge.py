@@ -49,12 +49,12 @@ def test_step_due_today_is_listed(conn):
     assert "Harden off seedlings" in msg
 
 
-def test_overdue_step_listed_with_date(conn):
+def test_overdue_step_listed_with_short_date(conn):
     add_activity(conn, "a1", "Transplant Tomatoes", "active", "2026-07-15")
     add_step(conn, "s1", "a1", "Water in transplants", "pending", "2026-07-16")
     msg = evening_nudge.build_nudge(conn, TODAY)
     assert "Water in transplants" in msg
-    assert "2026-07-16" in msg
+    assert "Jul 16" in msg
 
 
 def test_future_step_not_listed(conn):
@@ -86,7 +86,7 @@ def test_fired_activity_due_today_is_listed(conn):
     add_activity(conn, "a1", "Southern Peas: Sow", "active", TODAY, "S1")
     msg = evening_nudge.build_nudge(conn, TODAY)
     assert "Southern Peas: Sow" in msg
-    assert "S1" in msg
+    assert "due today" in msg
 
 
 def test_watching_activity_not_listed(conn):
@@ -99,12 +99,12 @@ def test_all_clear_returns_none(conn):
     assert evening_nudge.build_nudge(conn, TODAY) is None
 
 
-def test_group_prefix_in_lines(conn):
+def test_compact_format_no_domain_prefix(conn):
     add_activity(conn, "a1", "Transplant Tomatoes", "active", TODAY, "Tomatoes")
     add_step(conn, "s1", "a1", "Water in transplants", "due", TODAY)
     msg = evening_nudge.build_nudge(conn, TODAY)
-    assert "Tomatoes" in msg
-    assert "Garden" in msg  # domain named so multi-domain nudges read clearly
+    assert "Transplant Tomatoes: Water in transplants" in msg
+    assert "Garden —" not in msg  # no domain prefix
 
 
 def test_long_list_is_capped_but_counted(conn):
@@ -113,3 +113,30 @@ def test_long_list_is_capped_but_counted(conn):
     msg = evening_nudge.build_nudge(conn, TODAY)
     assert len([l for l in msg.splitlines() if l.startswith("-")]) <= 10
     assert "5 more" in msg
+
+
+def test_multiple_steps_same_activity_bundled(conn):
+    add_activity(conn, "a1", "Armyworm Scouting", "active", "2026-07-10")
+    add_step(conn, "s1", "a1", "Soap-flush #1", "pending", "2026-07-15")
+    add_step(conn, "s2", "a1", "Soap-flush #2", "pending", "2026-07-18")
+    add_step(conn, "s3", "a1", "Buy bifenthrin", "pending", "2026-07-12")
+    msg = evening_nudge.build_nudge(conn, TODAY)
+    assert "Armyworm Scouting: 3 steps" in msg
+    assert msg.count("Armyworm Scouting") == 1
+    assert "Jul 12" in msg  # earliest date
+
+
+def test_activity_with_steps_not_double_listed(conn):
+    add_activity(conn, "a1", "Transplant Tomatoes", "active", TODAY)
+    add_step(conn, "s1", "a1", "Water in transplants", "due", TODAY)
+    msg = evening_nudge.build_nudge(conn, TODAY)
+    # activity should not appear separately since its steps already show
+    assert msg.count("Transplant Tomatoes") == 1
+
+
+def test_total_count_reflects_individual_items(conn):
+    add_activity(conn, "a1", "Armyworm Scouting", "active", "2026-07-10")
+    add_step(conn, "s1", "a1", "Soap-flush #1", "pending", "2026-07-15")
+    add_step(conn, "s2", "a1", "Soap-flush #2", "pending", "2026-07-18")
+    msg = evening_nudge.build_nudge(conn, TODAY)
+    assert "Still open this evening (2):" in msg  # 2 steps, not 1 bundled line
