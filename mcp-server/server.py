@@ -951,17 +951,13 @@ async def api_sync(request: Request):
 async def api_briefing(request: Request):
     log.info("api_briefing called")
     try:
-        from sync.briefing_context import main as briefing_main
-        import io
-        from contextlib import redirect_stdout
+        from sync.morning_briefing import build_briefing
 
-        def _capture():
-            buf = io.StringIO()
-            with redirect_stdout(buf):
-                briefing_main()
-            return buf.getvalue()
+        def _build():
+            with connect() as conn:
+                return build_briefing(conn)
 
-        text = await asyncio.to_thread(_capture)
+        text = await asyncio.to_thread(_build)
         return PlainTextResponse(text if text.strip() else "No briefing data available.\n")
     except Exception as e:
         log.exception("api_briefing failed")
