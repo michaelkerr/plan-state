@@ -1,0 +1,14 @@
+.git
+.claude
+.pytest_cache
+.DS_Store
+.env
+*.egg-info
+tests/
+docs/
+examples/
+scripts/
+skills/
+claude-skills/
+*.md
+!requirements.txt

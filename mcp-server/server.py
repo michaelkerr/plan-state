@@ -1,19 +1,30 @@
 #!/usr/bin/env python3
-"""Plan-Sync MCP server. Exposes the SQLite plan store as typed tools for Hermes."""
+"""Plan-Sync MCP server with SSE transport and HTTP API.
+
+Exposes the SQLite plan store as typed tools for Hermes (via MCP over SSE)
+and as HTTP endpoints for cron scripts (sync, briefing, nudge).
+"""
 
 import asyncio
 import json
+import logging
+import os
 import sqlite3
 from datetime import date, timedelta
 
 from mcp.server import Server
-from mcp.server.stdio import stdio_server
+from mcp.server.sse import SseServerTransport
 import mcp.types as types
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import JSONResponse, PlainTextResponse
+from starlette.routing import Mount, Route
 
 from plansync.engine import (
     cascade_step_dates,
     compute_trigger_date,
     connect,
+    db_path,
     defer_trigger_def,
     derive_conditions,
     get_actionable_items,
@@ -34,7 +45,16 @@ from plansync.authoring import (
     validate_domain_definition,
 )
 
+log = logging.getLogger("plansync")
+
 server = Server("plansync")
+sse = SseServerTransport("/messages/")
+
+
+def require(args: dict, *fields: str) -> None:
+    missing = [f for f in fields if f not in args or args[f] is None]
+    if missing:
+        raise ValueError(f"Missing required field(s): {', '.join(missing)}")
 
 
 def ok(data) -> types.CallToolResult:
@@ -245,37 +265,68 @@ async def list_tools() -> list[types.Tool]:
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
-    with connect() as conn:
-        if name == "get_domains":
-            return _get_domains(conn)
-        elif name == "get_domain_plan":
-            return _get_domain_plan(conn, arguments["domain_id"])
-        elif name == "update_activity":
-            return _update_activity(conn, arguments)
-        elif name == "update_step":
-            return _update_step(conn, arguments)
-        elif name == "complete_activity":
-            return _complete_activity(conn, arguments)
-        elif name == "defer_activity":
-            return _defer_activity(conn, arguments)
-        elif name == "add_observation":
-            return _add_observation(conn, arguments)
-        elif name == "get_upcoming":
-            return _get_upcoming(conn, arguments.get("days_ahead", 14))
-        elif name == "get_weather_current":
-            return _get_weather_current(conn, arguments["location"])
-        elif name == "load_domain":
-            return _load_domain(conn, arguments)
-        elif name == "add_activities":
-            return _add_activities(conn, arguments)
-        elif name == "delete_activity":
-            return _delete_activity(conn, arguments)
-        elif name == "add_step":
-            return _add_step(conn, arguments)
-        elif name == "undo":
-            return _undo(conn, arguments)
-        else:
-            return err(f"Unknown tool: {name}")
+    log.info("tool_call: %s", name)
+    try:
+        with connect() as conn:
+            if name == "get_domains":
+                return _get_domains(conn)
+            elif name == "get_domain_plan":
+                require(arguments, "domain_id")
+                return _get_domain_plan(conn, arguments["domain_id"])
+            elif name == "update_activity":
+                require(arguments, "activity_id")
+                return _update_activity(conn, arguments)
+            elif name == "update_step":
+                require(arguments, "step_id")
+                return _update_step(conn, arguments)
+            elif name == "complete_activity":
+                require(arguments, "activity_id")
+                return _complete_activity(conn, arguments)
+            elif name == "defer_activity":
+                require(arguments, "activity_id", "new_date")
+                return _defer_activity(conn, arguments)
+            elif name == "add_observation":
+                require(arguments, "domain_id", "observation_text")
+                return _add_observation(conn, arguments)
+            elif name == "get_upcoming":
+                return _get_upcoming(conn, arguments.get("days_ahead", 14))
+            elif name == "get_weather_current":
+                require(arguments, "location")
+                return _get_weather_current(conn, arguments["location"])
+            elif name == "load_domain":
+                require(arguments, "definition")
+                return _load_domain(conn, arguments)
+            elif name == "add_activities":
+                require(arguments, "domain_id", "activities")
+                return _add_activities(conn, arguments)
+            elif name == "delete_activity":
+                require(arguments, "activity_id")
+                return _delete_activity(conn, arguments)
+            elif name == "add_step":
+                require(arguments, "activity_id", "name", "step_type", "lead_days")
+                return _add_step(conn, arguments)
+            elif name == "undo":
+                return _undo(conn, arguments)
+            else:
+                return err(f"Unknown tool: {name}")
+    except ValueError as e:
+        log.warning("tool_call %s validation error: %s", name, e)
+        return err(str(e))
+    except (KeyError, TypeError) as e:
+        log.warning("tool_call %s input error: %s", name, e)
+        return err(f"Invalid input: {e}")
+    except json.JSONDecodeError as e:
+        log.warning("tool_call %s JSON error: %s", name, e)
+        return err(f"JSON decode error: {e}")
+    except sqlite3.Error as e:
+        log.error("tool_call %s database error: %s", name, e)
+        return err(f"Database error: {e}")
+    except Exception as e:
+        log.exception("tool_call %s unexpected error", name)
+        return err(f"Internal error: {type(e).__name__}: {e}")
+
+
+# ── Tool implementations (unchanged from stdio version) ──────────
 
 
 def _get_domains(conn) -> types.CallToolResult:
@@ -445,14 +496,12 @@ def _update_activity(conn, args) -> types.CallToolResult:
     conn.execute(f"UPDATE activities SET {', '.join(sets)} WHERE id=?", vals)
 
     if "trigger_def" in changes:
-        # trigger_def is the source of truth: rebuild the derived conditions cache
         conn.execute("DELETE FROM conditions WHERE activity_id=?", (aid,))
         for cond_def in derive_conditions(args["trigger_def"]):
             conn.execute(
                 "INSERT INTO conditions (id, activity_id, condition_type, definition) VALUES (?,?,?,?)",
                 (new_id(), aid, cond_def["condition_type"], json.dumps(cond_def["definition"])),
             )
-        # Decided work gaining a trigger goes back under condition watching
         if current.get("trigger_def") is None and current.get("status") == "active" \
                 and "status" not in changes:
             transition(conn, "activity", aid, "watch")
@@ -511,9 +560,6 @@ def _add_step(conn, args) -> types.CallToolResult:
 
 
 def _step_status_event(current, desired):
-    """Map a requested step status to the state-machine event that reaches it.
-
-    Returns (event, context) or (None, None) when no transition exists."""
     named = {
         ("pending", "completed"): "complete",
         ("due", "completed"): "complete",
@@ -552,7 +598,6 @@ def _update_step(conn, args) -> types.CallToolResult:
     batch = new_batch_id()
 
     if sets:
-        # Re-derive due_date if lead_days or step_type changed
         if "lead_days" in changes or "step_type" in changes:
             activity = conn.execute(
                 "SELECT trigger_date FROM activities WHERE id=?", (current["activity_id"],)
@@ -587,7 +632,6 @@ def _update_step(conn, args) -> types.CallToolResult:
 
     updated = conn.execute("SELECT * FROM steps WHERE id=?", (sid,)).fetchone()
     updated = row_to_dict(updated)
-    # Include parent context so the caller knows what activity this belongs to
     activity = conn.execute(
         "SELECT id, name, group_name FROM activities WHERE id=?",
         (updated["activity_id"],),
@@ -635,10 +679,6 @@ def _defer_activity(conn, args) -> types.CallToolResult:
     if not new_date:
         return err("new_date is required: deferral moves the trigger date (there is no 'deferred' status)")
 
-    # Deferral is a date move, not a status: the activity returns to 'watching'
-    # so the cron re-fires it on the new date (evaluate_triggers only scans
-    # 'watching'; a fired activity being deferred needs its trigger_fired reset).
-    # trigger_def must move too -- _check_trigger fires from it, not trigger_date.
     batch = new_batch_id()
     try:
         transition(conn, "activity", aid, "defer", {"batch_id": batch})
@@ -718,8 +758,6 @@ def _delete_activity(conn, args) -> types.CallToolResult:
     })
 
 
-# Fields undo may restore from logged old_values, per entity type. Everything
-# else in an old_value (reason, notes, fired_by) is annotation, not state.
 UNDO_RESTORABLE_FIELDS = {
     "activity": {"name", "description", "group_name", "trigger_date", "trigger_def", "trigger_type"},
     "step": {"name", "description", "lead_days", "step_type", "due_date"},
@@ -746,8 +784,6 @@ def _restore_fields(conn, item_type, item_id, old_value):
 
 def _undo(conn, args) -> types.CallToolResult:
     item_type, item_id = args.get("item_type"), args.get("item_id")
-    # Skip undo batches themselves (their summary entry has action='undo'):
-    # reverting a reversal is undoing an undo, which is not supported
     q = ("SELECT batch_id FROM activity_log l WHERE batch_id IS NOT NULL "
          "AND NOT EXISTS (SELECT 1 FROM activity_log u "
          "WHERE u.batch_id = l.batch_id AND u.action='undo')")
@@ -776,7 +812,6 @@ def _undo(conn, args) -> types.CallToolResult:
     undo_batch = new_batch_id()
     reverted, skipped = [], []
     try:
-        # Reverse order: later side effects revert before the root action
         for e in entries:
             old = e["old_value"] or {}
             if e["item_type"] not in ("activity", "step"):
@@ -788,7 +823,6 @@ def _undo(conn, args) -> types.CallToolResult:
                            {"to_status": old.get("status"), "batch_id": undo_batch})
                 restored = _restore_fields(conn, e["item_type"], e["item_id"], old)
                 if e["action"] == "trigger_fire":
-                    # a reverted fire is un-fired; the cron may fire it again
                     conn.execute("UPDATE activities SET trigger_fired=NULL WHERE id=?", (e["item_id"],))
                 reverted.append({"item_type": e["item_type"], "item_id": e["item_id"],
                                  "status": old.get("status"), "fields": restored})
@@ -796,14 +830,13 @@ def _undo(conn, args) -> types.CallToolResult:
                 restored = _restore_fields(conn, e["item_type"], e["item_id"], old)
                 reverted.append({"item_type": e["item_type"], "item_id": e["item_id"],
                                  "fields": restored})
-            else:  # created / observation have no prior state to restore
+            else:
                 skipped.append({"item_id": e["item_id"], "action": e["action"],
                                 "reason": f"'{e['action']}' entries are not reverted"})
     except ValueError as exc:
         conn.rollback()
         return err(f"Undo failed, nothing changed: {exc}")
 
-    # Root entry (earliest in the batch) anchors the undo record
     root = entries[-1]
     log_change(conn, root["item_type"], root["item_id"], "undo", None,
                {"undo_of": batch, "reverted": len(reverted), "skipped": len(skipped)},
@@ -846,10 +879,6 @@ def _get_upcoming(conn, days_ahead) -> types.CallToolResult:
     cutoff = (date.today() + timedelta(days=days_ahead)).isoformat()
     today_str = date.today().isoformat()
 
-    # Which activities are relevant comes from the shared view layer: open
-    # activities in the window, plus any parent of an actionable step in the
-    # window regardless of its own status (a completed activity with a due
-    # follow-up is still worth showing)
     open_acts = get_open_activities(conn, through_date=cutoff, include_undated=True)
     window_steps = get_actionable_items(conn, as_of_date=cutoff, include_undated=True)
     activity_ids = [a["activity_id"] for a in open_acts]
@@ -859,7 +888,6 @@ def _get_upcoming(conn, days_ahead) -> types.CallToolResult:
 
     result = []
     for aid in activity_ids:
-        # Hydrate the full row by primary key -- selection logic stays in the views
         a = conn.execute(
             "SELECT a.*, d.name as domain_name FROM activities a "
             "JOIN domains d ON a.domain_id = d.id WHERE a.id=?", (aid,)).fetchone()
@@ -898,10 +926,151 @@ def _get_weather_current(conn, location) -> types.CallToolResult:
     return ok(result)
 
 
-async def main():
-    async with stdio_server() as (read_stream, write_stream):
-        await server.run(read_stream, write_stream, server.create_initialization_options())
+# ── HTTP API endpoints (for Hermes cron scripts) ─────────────
+
+
+async def api_health(request: Request):
+    try:
+        with connect() as conn:
+            conn.execute("SELECT 1").fetchone()
+        return JSONResponse({"status": "ok", "db": db_path()})
+    except Exception as e:
+        return JSONResponse({"status": "error", "error": str(e)}, status_code=503)
+
+
+async def api_sync(request: Request):
+    log.info("api_sync called")
+    try:
+        text = await asyncio.to_thread(_run_sync)
+        return PlainTextResponse(text)
+    except Exception as e:
+        log.exception("api_sync failed")
+        return PlainTextResponse(f"sync error: {e}\n", status_code=500)
+
+
+async def api_briefing(request: Request):
+    log.info("api_briefing called")
+    try:
+        from sync.briefing_context import main as briefing_main
+        import io
+        from contextlib import redirect_stdout
+
+        def _capture():
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                briefing_main()
+            return buf.getvalue()
+
+        text = await asyncio.to_thread(_capture)
+        return PlainTextResponse(text if text.strip() else "No briefing data available.\n")
+    except Exception as e:
+        log.exception("api_briefing failed")
+        return PlainTextResponse(f"briefing error: {e}\n", status_code=500)
+
+
+async def api_nudge(request: Request):
+    log.info("api_nudge called")
+    try:
+        from sync.evening_nudge import build_nudge
+        with connect() as conn:
+            msg = build_nudge(conn, date.today().isoformat())
+        if msg:
+            return PlainTextResponse(msg)
+        return PlainTextResponse("")
+    except Exception as e:
+        log.exception("api_nudge failed")
+        return PlainTextResponse(f"nudge error: {e}\n", status_code=500)
+
+
+# ── Internal sync scheduler ──────────────────────────────────
+
+
+def _run_sync():
+    """Run the sync pipeline without sys.exit(). Returns summary text."""
+    from sync.sync_pipeline import (
+        SyncSummary, pull_weather, evaluate_conditions,
+        evaluate_triggers, cascade_dates, check_overdue, save_output,
+        _today, _now,
+    )
+    today = _today()
+    now = _now()
+    summary = SyncSummary(today=today)
+    with connect() as conn:
+        try:
+            pull_weather(conn, summary, today=today, now=now)
+            conn.commit()
+            evaluate_conditions(conn, summary, today=today, now=now)
+            conn.commit()
+            evaluate_triggers(conn, summary, today=today, now=now)
+            conn.commit()
+            cascade_dates(conn, summary, now=now)
+            conn.commit()
+            check_overdue(conn, summary, today=today)
+            conn.commit()
+            save_output(summary, today=today, now=now)
+        except Exception as e:
+            summary.errors.append(f"Fatal: {e}")
+            conn.rollback()
+    return summary.to_stdout() or "sync complete, no changes\n"
+
+
+async def _sync_loop():
+    interval = int(os.environ.get("SYNC_INTERVAL", "3600"))
+    log.info("internal sync scheduler started (interval=%ds)", interval)
+    while True:
+        await asyncio.sleep(interval)
+        log.info("running scheduled sync")
+        try:
+            result = await asyncio.to_thread(_run_sync)
+            log.info("scheduled sync completed: %s", result.strip())
+        except Exception:
+            log.exception("scheduled sync failed")
+
+
+# ── App assembly ─────────────────────────────────────────────
+
+
+async def handle_sse(request: Request):
+    async with sse.connect_sse(
+        request.scope, request.receive, request._send
+    ) as streams:
+        await server.run(
+            streams[0], streams[1], server.create_initialization_options()
+        )
+
+
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def lifespan(app):
+    task = asyncio.create_task(_sync_loop())
+    yield
+    task.cancel()
+
+
+app = Starlette(
+    routes=[
+        Route("/health", api_health),
+        Route("/api/sync", api_sync, methods=["GET", "POST"]),
+        Route("/api/briefing", api_briefing),
+        Route("/api/nudge", api_nudge),
+        Route("/sse", handle_sse),
+        Mount("/messages/", app=sse.handle_post_message),
+    ],
+    lifespan=lifespan,
+)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import uvicorn
+
+    logging.basicConfig(
+        level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+
+    host = os.environ.get("HOST", "0.0.0.0")
+    port = int(os.environ.get("PORT", "8082"))
+    log.info("starting plansync MCP server on %s:%d", host, port)
+    uvicorn.run(app, host=host, port=port, log_level="info")
