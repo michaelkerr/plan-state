@@ -1026,13 +1026,15 @@ async def _sync_loop():
 # ── App assembly ─────────────────────────────────────────────
 
 
-async def handle_sse(request: Request):
-    async with sse.connect_sse(
-        request.scope, request.receive, request._send
-    ) as streams:
-        await server.run(
-            streams[0], streams[1], server.create_initialization_options()
-        )
+class _SSEHandler:
+    async def __call__(self, scope, receive, send):
+        async with sse.connect_sse(scope, receive, send) as streams:
+            await server.run(
+                streams[0], streams[1], server.create_initialization_options()
+            )
+
+
+_sse_handler = _SSEHandler()
 
 
 from contextlib import asynccontextmanager
@@ -1051,7 +1053,7 @@ app = Starlette(
         Route("/api/sync", api_sync, methods=["GET", "POST"]),
         Route("/api/briefing", api_briefing),
         Route("/api/nudge", api_nudge),
-        Route("/sse", handle_sse),
+        Route("/sse", _sse_handler),
         Mount("/messages/", app=sse.handle_post_message),
     ],
     lifespan=lifespan,
@@ -1059,14 +1061,29 @@ app = Starlette(
 
 
 if __name__ == "__main__":
-    import uvicorn
+    import sys
 
     logging.basicConfig(
         level=os.environ.get("LOG_LEVEL", "INFO").upper(),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
-    host = os.environ.get("HOST", "0.0.0.0")
-    port = int(os.environ.get("PORT", "8082"))
-    log.info("starting plansync MCP server on %s:%d", host, port)
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    if "--stdio" in sys.argv:
+        from mcp.server.stdio import stdio_server
+
+        async def _run_stdio():
+            async with stdio_server() as (read_stream, write_stream):
+                await server.run(
+                    read_stream, write_stream,
+                    server.create_initialization_options(),
+                )
+
+        log.info("starting plansync MCP server (stdio)")
+        asyncio.run(_run_stdio())
+    else:
+        import uvicorn
+
+        host = os.environ.get("HOST", "0.0.0.0")
+        port = int(os.environ.get("PORT", "8082"))
+        log.info("starting plansync MCP server on %s:%d", host, port)
+        uvicorn.run(app, host=host, port=port, log_level="info")

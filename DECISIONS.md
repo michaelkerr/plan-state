@@ -133,3 +133,13 @@ Each entry captures a decision that affects how the codebase should evolve. Read
 - **Context**: server.py was 800+ lines mixing MCP tool dispatch with domain authoring logic. Separating them makes authoring testable without MCP and reusable from a future CLI.
 - **Alternatives considered**: Keeping everything in server.py (simpler, but limits reuse); moving to engine.py (engine handles state machines and DB access, not business-rule validation).
 - **Consequences**: New module plansync/authoring.py. Server.py imports from it. Tests that validated server.py private functions now import from plansync.authoring.
+
+---
+
+### D14: Standalone plansync container, code copied not mounted
+- **Date**: 2026-08-27
+- **Area**: deployment, containers
+- **Decision**: The plansync MCP server runs in its own container (`reach-plansync`) built from the plan-state Dockerfile. Code is COPY'd into the image at build time, not volume-mounted.
+- **Context**: The previous setup volume-mounted the entire repo into reach-gateway, which was brittle — filesystem differences (exFAT/VirtioFS) caused WAL failures (D5), and the tight coupling between the repo working tree and the running container made it easy to break production with an uncommitted edit. The standalone container with copied code is simpler and more predictable: the running code matches the built image, period.
+- **Alternatives considered**: Keeping the volume mount (faster iteration but fragile); a dev-mode compose override with a volume mount (complexity for a single-developer project).
+- **Consequences**: Code changes require a container rebuild (`docker compose build plansync && docker compose up -d plansync` from the reach directory). The data volume (`/opt/data`) is still mounted. CLAUDE.md's volume-mount documentation needs updating. Claude Desktop connects via SSE URL (`http://localhost:8082/sse`), not `docker exec`.
