@@ -1,0 +1,99 @@
+# Path Template Schema
+#
+# A path is a versioned YAML template that produces dispatch items when
+# instantiated with domain context parameters.  Paths ship as examples
+# (garden-fall, lawn-cool-season, hunting-bow) and users can author
+# custom paths via plan-state's authoring skill.
+#
+# Paths declare their required parameters so that:
+#   - plan-state can validate a domain context before instantiation
+#   - A future lifecycle engine can validate paths against an ontology
+#   - LLM authoring skills can prompt for missing parameters
+
+---
+
+path:
+  type: object
+  required: [id, version, name, params, items]
+  properties:
+
+    id:
+      type: string
+      description: "Path identifier (e.g. 'garden-fall')"
+
+    version:
+      type: string
+      description: "Semver (e.g. '1.0.0')"
+
+    name:
+      type: string
+      description: "Human-readable name (e.g. 'Fall Garden')"
+
+    description:
+      type: string
+
+    # Required parameters — must be provided at instantiation
+    params:
+      type: array
+      items:
+        type: object
+        required: [name, type]
+        properties:
+          name:
+            type: string
+            description: "Parameter name (e.g. 'zone', 'beds', 'frost_date_fall')"
+          type:
+            type: string
+            enum: [string, number, date, list, entity_ref]
+            description: >
+              'entity_ref' means this param references entities from the
+              domain context (e.g. beds, stands).  The instantiation
+              engine expands entity_ref lists into per-entity items.
+          required:
+            type: boolean
+            default: true
+          default: {}
+          description:
+            type: string
+
+    # Item templates — expanded at instantiation time
+    items:
+      type: array
+      items:
+        type: object
+        required: [ref, name, trigger]
+        properties:
+          ref:
+            type: string
+            description: >
+              Stable reference within this path (e.g. 'transplant',
+              'first-spray').  Used in after-triggers and as source_ref
+              prefix when items are created in dispatch.
+          name:
+            type: string
+            description: >
+              Supports parameter substitution: "Transplant {crop} in {bed}"
+          description:
+            type: string
+          group:
+            type: string
+            description: "Optional group for display (supports substitution)"
+          trigger:
+            type: object
+            description: "Trigger definition (same schema as dispatch items)"
+          checklist:
+            type: array
+            items:
+              type: object
+              properties:
+                label: { type: string }
+          sort_order:
+            type: integer
+            default: 0
+          per_entity:
+            type: string
+            description: >
+              If set, this item is duplicated for each entity of the
+              named entity_ref param.  E.g. per_entity: "beds" creates
+              one item per bed.  The current entity is available as
+              {entity.name}, {entity.properties.*} in name/description.

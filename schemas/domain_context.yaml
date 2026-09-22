@@ -1,0 +1,117 @@
+# Domain Context Schema
+#
+# This is the handoff format between knowledge bases and plan-state.
+# A domain context describes one life domain: its entities, their current
+# states, and the parameters needed to instantiate paths.
+#
+# The schema is deliberately entity-agnostic.  "bed", "stand", "zone" are
+# all just entity types with properties — no domain-specific fields in
+# shared code.  This leaves the door open for a future lifecycle engine
+# that validates contexts against formal ontologies.
+#
+# plan-state adapters read from knowledge bases (Obsidian, config YAML,
+# etc.) and produce domain contexts in this format.  dispatch never reads
+# domain contexts directly — it receives instantiated items.
+
+---
+
+domain_context:
+  type: object
+  required: [domain, location]
+  properties:
+
+    domain:
+      type: string
+      description: "Slug identifier (e.g. 'garden', 'lawn', 'hunting')"
+
+    display_name:
+      type: string
+      description: "Human-readable name (e.g. 'Fall Garden 2026')"
+
+    location:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: "Location string for weather API (e.g. 'Nashville,TN,US')"
+        lat: { type: number }
+        lon: { type: number }
+        timezone:
+          type: string
+          description: "IANA timezone (e.g. 'America/Chicago')"
+
+    # Domain parameters — passed to paths at instantiation
+    params:
+      type: object
+      description: >
+        Free-form key-value pairs that paths can reference.
+        Examples: { zone: "7a", frost_date_spring: "2026-04-15",
+                    frost_date_fall: "2026-10-20", acreage: 0.25 }
+
+    # Entities — the things in this domain
+    entities:
+      type: array
+      items:
+        type: object
+        required: [type, name]
+        properties:
+          type:
+            type: string
+            description: "Entity type (e.g. 'bed', 'stand', 'zone', 'plot')"
+          name:
+            type: string
+            description: "Unique within domain (e.g. 'Bed 1', 'North Stand')"
+          properties:
+            type: object
+            description: >
+              Free-form properties for this entity.
+              Examples for a bed: { soil_type: "clay-loam", sun: "full",
+                                    current_crop_family: "nightshades" }
+              Examples for a stand: { type: "hang-on", height_ft: 20,
+                                      gps: "36.1234,-86.5678" }
+          state:
+            type: string
+            description: >
+              Current lifecycle state if applicable (e.g. "planted",
+              "harvesting", "fallow").  Managed by plan-state or
+              conversationally; dispatch never reads this.
+          notes:
+            type: string
+
+    # Active paths — which paths are currently instantiated
+    active_paths:
+      type: array
+      items:
+        type: object
+        properties:
+          path_id:
+            type: string
+            description: "Path template ID + version (e.g. 'garden-fall@1.0')"
+          instantiated_at:
+            type: string
+            format: datetime
+          params_used:
+            type: object
+            description: "Snapshot of params passed at instantiation time"
+
+    # Season / cycle metadata
+    season:
+      type: object
+      properties:
+        name:
+          type: string
+          description: "e.g. 'Fall 2026', 'Bow Season 2026'"
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+
+    # Metadata
+    updated_at:
+      type: string
+      format: datetime
+    notes:
+      type: string

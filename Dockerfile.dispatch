@@ -1,0 +1,30 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install dependencies first (cache layer)
+COPY pyproject.toml .
+RUN pip install --no-cache-dir .
+
+# Copy application code
+COPY dispatch/ dispatch/
+COPY planstate/ planstate/
+COPY paths/ paths/
+COPY schemas/ schemas/
+COPY skills/ skills/
+
+# Re-install with code in place
+RUN pip install --no-cache-dir -e .
+
+# DB and data volume
+ENV DISPATCH_DB=/data/dispatch.db
+ENV DISPATCH_PATHS_DIR=/app/paths
+VOLUME /data
+
+EXPOSE 8082
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD curl -sf http://localhost:8082/health || exit 1
+
+# Default: HTTP MCP + API endpoints
+CMD ["dispatch", "serve", "--http", "--port", "8082", "--api"]

@@ -1,0 +1,79 @@
+# Dispatch Event Log Schema
+#
+# Append-only.  Every state change dispatch performs is recorded here.
+# The event log serves three purposes:
+#   1. Audit trail (who did what when)
+#   2. Undo support (revert the last batch)
+#   3. Future lifecycle engine replay (reconstruct domain state from events)
+#
+# Format: one JSON object per line in events.jsonl, or rows in the
+# event_log SQLite table.  Both representations use this schema.
+
+---
+
+event:
+  type: object
+  required: [id, event_type, timestamp]
+  properties:
+
+    id:
+      type: string
+      description: "Unique event ID (12-char hex)"
+
+    batch_id:
+      type: string
+      description: "Groups events from one operation for atomic undo"
+
+    event_type:
+      type: string
+      enum:
+        - item_created
+        - trigger_fired
+        - item_completed
+        - item_skipped
+        - item_deferred
+        - item_undone
+        - weather_snapshot
+        - note_added
+        - checklist_updated
+        - items_instantiated
+
+    timestamp:
+      type: string
+      format: datetime
+      description: "UTC ISO-8601"
+
+    # What was affected
+    domain:
+      type: string
+      description: "Domain slug, present on all item events"
+    item_id:
+      type: string
+      description: "Item ID, present on item events"
+    source_ref:
+      type: string
+      description: "Opaque plan-state reference, carried through for lifecycle replay"
+
+    # Who did it
+    source:
+      type: string
+      enum: [cron, hermes, claude, human, system]
+      description: "Attribution: what initiated this event"
+
+    # State change detail
+    old_values:
+      type: object
+      description: "Fields before the change (for undo)"
+    new_values:
+      type: object
+      description: "Fields after the change"
+
+    # Free-form context
+    payload:
+      type: object
+      description: >
+        Additional context for replay.  Examples:
+        - trigger_fired: { trigger_type: "condition", conditions_met: {...} }
+        - item_completed: { notes: "done early, frost coming" }
+        - weather_snapshot: { location: "...", high: 72, low: 45, conditions: [...] }
+        - items_instantiated: { path_id: "garden-fall@1.0", params: {...}, item_count: 12 }

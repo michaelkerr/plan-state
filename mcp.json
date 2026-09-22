@@ -1,0 +1,16 @@
+{
+  "servers": {
+    "dispatch": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "dispatch.server"],
+      "env": {
+        "DISPATCH_DB": "${PLUGIN_DATA}/dispatch.db",
+        "DISPATCH_PATHS_DIR": "${PLUGIN_ROOT}/paths",
+        "OWM_API_KEY": "${OWM_API_KEY}",
+        "DISPATCH_LOCATION": "${DISPATCH_LOCATION}",
+        "DISPATCH_CLIENT": "hermes"
+      }
+    }
+  }
+}

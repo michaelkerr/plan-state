@@ -1,0 +1,172 @@
+id: hunting-bow
+version: "1.0.0"
+name: Bow Season (Whitetail)
+description: >
+  Whitetail deer bow season prep and execution.  Covers pre-season
+  scouting, stand prep, food plot management, and season execution
+  gated on weather conditions and calendar dates.
+
+params:
+  - name: season_open
+    type: date
+    required: true
+    description: "Bow season opening date (YYYY-MM-DD)"
+  - name: season_close
+    type: date
+    required: true
+    description: "Bow season closing date (YYYY-MM-DD)"
+  - name: stands
+    type: entity_ref
+    required: false
+    description: "List of stand entities from domain context"
+  - name: plots
+    type: entity_ref
+    required: false
+    description: "List of food plot entities from domain context"
+
+items:
+  - ref: deploy-cameras
+    name: "Deploy trail cameras"
+    description: "Set up cameras on travel corridors and food sources"
+    group: "Scouting"
+    trigger:
+      type: calendar
+      date: "{season_open}"
+      prep_days: 60
+    sort_order: 1
+    checklist:
+      - label: "Fresh batteries and SD cards"
+      - label: "Set to photo + video mode"
+      - label: "Position on trails, scrapes, food sources"
+      - label: "Record GPS locations"
+
+  - ref: check-cameras
+    name: "First camera check"
+    group: "Scouting"
+    trigger:
+      type: after
+      item_ref: deploy-cameras
+      event: completed
+      offset_days: 14
+    sort_order: 2
+    checklist:
+      - label: "Pull SD cards"
+      - label: "Review photos/video"
+      - label: "Note buck patterns and timing"
+      - label: "Reposition if needed"
+
+  - ref: prep-stands
+    name: "Prep stands and access routes"
+    description: "Clear shooting lanes, check safety gear, trim access"
+    group: "Stand Prep"
+    trigger:
+      type: calendar
+      date: "{season_open}"
+      prep_days: 30
+    sort_order: 3
+    checklist:
+      - label: "Inspect all hang-on stands and sticks"
+      - label: "Replace worn straps or cables"
+      - label: "Clear shooting lanes (quiet hand tools only)"
+      - label: "Trim access trails"
+      - label: "Check safety harness and lifeline"
+
+  - ref: plant-plots
+    name: "Plant food plots"
+    description: "Plant fall attractant plots (brassicas, cereal grains)"
+    group: "Food Plots"
+    trigger:
+      type: calendar
+      date: "{season_open}"
+      prep_days: 45
+    sort_order: 4
+    checklist:
+      - label: "Soil test if not done this year"
+      - label: "Spray or mow existing vegetation"
+      - label: "Broadcast seed and fertilizer"
+      - label: "Cultipack or drag"
+
+  - ref: final-scout
+    name: "Final pre-season scout"
+    description: "Last camera check and pattern confirmation"
+    group: "Scouting"
+    trigger:
+      type: calendar
+      date: "{season_open}"
+      prep_days: 7
+    sort_order: 5
+    checklist:
+      - label: "Pull all camera cards"
+      - label: "Analyze recent patterns"
+      - label: "Choose opening day stand"
+      - label: "Check wind forecast for opener"
+
+  - ref: opening-hunt
+    name: "Opening day hunt"
+    group: "Season"
+    trigger:
+      type: calendar
+      date: "{season_open}"
+    sort_order: 6
+
+  - ref: cold-front-hunt
+    name: "Cold front hunt"
+    description: "First significant cold front — deer movement spikes"
+    group: "Season"
+    trigger:
+      type: compound
+      op: and
+      triggers:
+        - type: calendar
+          date: "{season_open}"
+        - type: condition
+          rules:
+            - metric: daily_high
+              operator: "<="
+              value: 55
+              sustained_days: 1
+    sort_order: 7
+
+  - ref: rut-hunt
+    name: "Rut phase hunting"
+    description: "Peak rut activity — all-day sits, aggressive calling"
+    group: "Season"
+    trigger:
+      type: calendar
+      date: "{season_open}"
+      prep_days: -30
+    sort_order: 8
+    checklist:
+      - label: "Estrous scent and calls ready"
+      - label: "Plan all-day sits with food/water"
+      - label: "Focus on doe bedding areas and funnels"
+
+  - ref: late-season
+    name: "Late season strategy"
+    description: "Shift to food sources as cold sets in"
+    group: "Season"
+    trigger:
+      type: calendar
+      date: "{season_close}"
+      prep_days: 14
+    sort_order: 9
+    checklist:
+      - label: "Focus on afternoon food source sits"
+      - label: "Check remaining food plot condition"
+      - label: "Adjust stand selection for thermal cover"
+
+  - ref: season-close
+    name: "Season closeout"
+    description: "Pull cameras, remove stands if needed, record results"
+    group: "Post-Season"
+    trigger:
+      type: after
+      item_ref: late-season
+      event: completed
+      offset_days: 7
+    sort_order: 10
+    checklist:
+      - label: "Pull all trail cameras"
+      - label: "Remove temporary stands"
+      - label: "Record harvest data and observations"
+      - label: "Note stand/plot performance for next year"

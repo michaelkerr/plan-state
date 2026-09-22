@@ -1,0 +1,43 @@
+# docker-compose.plansync.yaml
+#
+# Add this service to your existing Hermes/Reach docker-compose.yml.
+# Or include it via: docker compose -f docker-compose.yml -f docker-compose.plansync.yaml up -d
+#
+# Required env vars in your .env:
+#   OWM_API_KEY=<your OpenWeatherMap API key>
+#   DISPATCH_LOCATION=Nashville,TN,US  (your city)
+#
+# After starting, configure Hermes to connect:
+#   mcp_servers:
+#     plansync:
+#       url: "http://plansync:8082/sse"
+
+services:
+  plansync:
+    build:
+      context: ${PLANSYNC_PATH:-.}
+      dockerfile: Dockerfile.dispatch
+    container_name: reach-plansync
+    restart: unless-stopped
+    environment:
+      - OWM_API_KEY=${OWM_API_KEY}
+      - DISPATCH_LOCATION=${DISPATCH_LOCATION}
+      - DISPATCH_DB=/data/dispatch.db
+      - DISPATCH_CLIENT=hermes
+    volumes:
+      - plansync-data:/data
+    networks:
+      - infra
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  plansync-data:
+
+networks:
+  infra:
+    external: true

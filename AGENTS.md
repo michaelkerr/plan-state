@@ -131,3 +131,25 @@ plan-state/
 
 ## Decisions
 See DECISIONS.md for the full log with context, alternatives, and consequences. Key decisions: Hermes Agent as runtime (D1), SQLite/WAL (D2), deterministic cron (D3), Telegram-only surface (D4), DB on APFS (D5), AI-agnostic peer access (D6), derived conditions (D7), transition-table state machines (D8), per-domain directories (D9), data outside repo (D10), deferral as date move (D11), MCP isError flag (D12), authoring extraction (D13), standalone container with copied code (D14).
+
+
+## Development Workflow
+
+This project uses the **product-delivery** lifecycle. All development
+work flows through the workflow state machine.
+
+Before starting any work:
+
+1. Call `workflow_status` to check the current state.
+2. If no workflow exists, call `workflow_init` to start one.
+3. Load the `product_delivery` prompt for full skill instructions.
+
+Rules:
+
+- Follow the workflow transitions. Do not skip states or bypass guards.
+- Use `workflow_next` to see what transitions are allowed.
+- Transition work items through the submachine:
+  ready → implementing → verifying → reviewing → accepted.
+- Run tests before and after each work item.
+- Record evidence for every transition.
+- Update AGENTS.md when new patterns emerge during delivery.

@@ -1,0 +1,25 @@
+# PlanSync configuration schema
+#
+# Copy to ~/.plansync/config.yaml and fill in your values.
+# All fields with defaults are optional.
+
+# Weather API (required for condition triggers)
+owm_api_key: ""          # OpenWeatherMap API key
+
+# Default location for weather evaluation
+location: ""             # e.g. "Nashville,TN,US"
+
+# Timezone for briefing/nudge scheduling
+timezone: "America/Chicago"
+
+# Database location (default: ~/.plansync/dispatch.db)
+# db_path: "~/.plansync/dispatch.db"
+
+# Path templates directory (default: bundled with package)
+# paths_dir: "~/.plansync/paths"
+
+# Domain contexts directory (default: ~/.plansync/domains)
+# context_dir: "~/.plansync/domains"
+
+# Obsidian vault path (optional — for the Obsidian KB adapter)
+# obsidian_vault: "~/vault"

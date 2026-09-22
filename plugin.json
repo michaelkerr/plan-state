@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-plugins.dev/v1/plugin.schema.json",
+  "name": "plansync",
+  "version": "0.1.0",
+  "description": "Condition-aware task orchestrator for life domains — garden, lawn, hunting, home maintenance. Weather-gated triggers, prep cascades, morning briefings, and one-code completions via Telegram.",
+  "author": "Michael Kerr",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/michaelkerr/plansync",
+  "skills": "skills/",
+  "mcp": "mcp.json"
+}

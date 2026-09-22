@@ -1,0 +1,162 @@
+# Dispatch Item Schema
+#
+# This is the canonical format for items that dispatch stores and evaluates.
+# plan-state (or any client) produces items in this shape via path
+# instantiation or direct creation.  dispatch owns the runtime fields
+# (status, trigger_fired, due_date); plan-state owns the authoring fields
+# (domain, source_ref, path_id).
+
+---
+
+# --- Item ---
+
+item:
+  type: object
+  required: [id, domain, name, trigger]
+  properties:
+
+    # Identity
+    id:
+      type: string
+      description: "12-char hex, assigned by dispatch on insert"
+    domain:
+      type: string
+      description: "Opaque domain slug (e.g. 'garden', 'lawn', 'hunting')"
+    name:
+      type: string
+      description: "Human-readable short name"
+    description:
+      type: string
+      description: "Optional detail or instructions"
+
+    # Provenance (set at instantiation, never mutated by dispatch)
+    source_ref:
+      type: string
+      description: "Opaque reference back to plan-state entity (e.g. 'bed-1:tomatoes'). dispatch treats this as an opaque string."
+    path_id:
+      type: string
+      description: "Which path template produced this item (e.g. 'garden-fall@1.0')"
+    group:
+      type: string
+      description: "Optional display grouping within a domain (e.g. 'Tomatoes', 'North Stand')"
+
+    # Trigger
+    trigger:
+      type: object
+      description: "What makes this item become due. See trigger types below."
+
+    # Status (managed by dispatch)
+    status:
+      type: string
+      enum: [watching, due, done, skipped]
+      default: watching
+    due_date:
+      type: string
+      format: date
+      description: "Set when trigger fires; null while watching"
+    trigger_fired:
+      type: string
+      format: datetime
+      description: "Timestamp when the trigger fired"
+    completed_at:
+      type: string
+      format: datetime
+
+    # Soft checklist (no state machine)
+    checklist:
+      type: array
+      items:
+        type: object
+        properties:
+          label: { type: string }
+          done: { type: boolean, default: false }
+
+    # Sequencing
+    sort_order:
+      type: integer
+      default: 0
+      description: "Display order within domain/group"
+
+    # Metadata
+    notes:
+      type: string
+    created_at:
+      type: string
+      format: datetime
+    updated_at:
+      type: string
+      format: datetime
+
+
+# --- Trigger types ---
+# All triggers share a top-level "type" discriminator.
+
+trigger_calendar:
+  type: object
+  required: [type, date]
+  properties:
+    type: { const: calendar }
+    date: { type: string, format: date }
+    prep_days:
+      type: integer
+      default: 0
+      description: "Item becomes due this many days before the target date"
+
+trigger_condition:
+  type: object
+  required: [type, rules]
+  properties:
+    type: { const: condition }
+    rules:
+      type: array
+      description: "All rules must be satisfied (implicit AND)"
+      items:
+        type: object
+        required: [metric, operator, value]
+        properties:
+          metric:
+            type: string
+            enum: [daily_high, daily_low, temp_high, temp_low]
+          operator:
+            type: string
+            enum: [">=", "<=", ">", "<", "=="]
+          value: { type: number }
+          sustained_days:
+            type: integer
+            default: 1
+            description: "Condition must hold for this many consecutive days"
+    earliest_date:
+      type: string
+      format: date
+      description: "Do not fire before this date even if conditions are met"
+
+trigger_after:
+  type: object
+  required: [type, item_ref]
+  properties:
+    type: { const: after }
+    item_ref:
+      type: string
+      description: "ID or ref_name of the item that must complete first"
+    event:
+      type: string
+      enum: [completed, fired]
+      default: completed
+    offset_days:
+      type: integer
+      default: 0
+      description: "Wait this many days after the referenced event"
+
+trigger_compound:
+  type: object
+  required: [type, op, triggers]
+  properties:
+    type: { const: compound }
+    op:
+      type: string
+      enum: [and, or]
+    triggers:
+      type: array
+      items:
+        description: "Any trigger type (recursive)"
+      minItems: 2
