@@ -1,14 +1,33 @@
 .git
 .claude
+.cursor
 .pytest_cache
+.workflow
 .DS_Store
 .env
 *.egg-info
-tests/
+__pycache__
+
+# Old system (not needed in new image)
+mcp-server/
+sync/
+plansync/
+plansync.egg-info/
+claude-skills/
 docs/
 examples/
+domain_schema.json
+init-db.py
+schema.sql
+register.sh
+Dockerfile
+BUILD_PLAN.archived.md
+
+# Test/dev only
+tests/
 scripts/
-skills/
-claude-skills/
+migration-output/
+
+# Don't ship markdown docs into the image
 *.md
-!requirements.txt
+!skills/**/*.md
