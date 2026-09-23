@@ -20,7 +20,7 @@ from mcp.server import Server
 from mcp import types
 
 from dispatch.store import (
-    connect, get_item, get_open_items, get_due_items,
+    connect, get_item, get_items, get_open_items, get_due_items,
     transition, new_id, now_iso, row_to_dict, log_event, init_db,
 )
 from dispatch.resolve import resolve, format_code_list
@@ -73,6 +73,22 @@ async def list_tools():
                     "query": {"type": "string", "description": "Code, name, or ID"},
                     "domain": {"type": "string", "description": "Narrow search to domain"},
                     "notes": {"type": "string", "description": "Completion notes"},
+                },
+                "required": ["query"],
+            },
+        ),
+        types.Tool(
+            name="skip",
+            description=(
+                "Skip an item by its code (e.g. H3), name substring, or ID. "
+                "The item leaves the open list and is not marked done."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Code, name, or ID"},
+                    "domain": {"type": "string", "description": "Narrow search to domain"},
+                    "notes": {"type": "string", "description": "Why it was skipped"},
                 },
                 "required": ["query"],
             },
@@ -133,6 +149,8 @@ async def call_tool(name: str, arguments: dict):
             return _status(arguments)
         elif name == "done":
             return _done(arguments)
+        elif name == "skip":
+            return _skip(arguments)
         elif name == "defer":
             return _defer(arguments)
         elif name == "note":
@@ -153,10 +171,11 @@ def _status(args):
     domain = args.get("domain")
     with connect() as conn:
         items = get_open_items(conn, domain=domain)
+        coded_from = get_items(conn, domain=domain)
     if not items:
         return ok({"message": "No open items", "items": []})
 
-    code_list = format_code_list(items)
+    code_list = format_code_list(items, code_source=coded_from)
     return ok({
         "count": len(items),
         "items": items,
@@ -183,17 +202,44 @@ def _done(args):
         )
 
     item = matches[0]
-    if item["status"] == "watching":
-        return err(
-            f"Item '{item['name']}' is still watching (not yet due). "
-            "It must be triggered first."
-        )
-
+    if item["status"] == "done":
+        return err(f"'{item['name']}' is already done.")
+    if item["status"] == "skipped":
+        return err(f"'{item['name']}' is already skipped.")
     with connect() as conn:
         batch_id = new_id()
         updated = transition(conn, item["id"], "complete",
                              batch_id=batch_id, notes=notes)
     return ok({"completed": updated})
+
+
+def _skip(args):
+    query = args["query"]
+    domain = args.get("domain")
+    notes = args.get("notes", "")
+
+    matches, exact = resolve(query, domain=domain)
+
+    if not matches:
+        return err(f"No match for '{query}'")
+
+    if not exact:
+        return err(
+            f"Ambiguous — {len(matches)} matches. "
+            "Be more specific or use the item code.\n"
+            + "\n".join(f"  {m['id']}  {m['domain']}/{m['name']}" for m in matches)
+        )
+
+    item = matches[0]
+    if item["status"] == "done":
+        return err(f"'{item['name']}' is already done.")
+    if item["status"] == "skipped":
+        return err(f"'{item['name']}' is already skipped.")
+    with connect() as conn:
+        batch_id = new_id()
+        updated = transition(conn, item["id"], "skip",
+                             batch_id=batch_id, notes=notes)
+    return ok({"skipped": updated})
 
 
 def _defer(args):
@@ -356,10 +402,11 @@ def create_http_app(enable_api=True):
             domain = request.query_params.get("domain")
             with connect() as conn:
                 items = get_open_items(conn, domain=domain)
+                coded_from = get_items(conn, domain=domain)
             return JSONResponse({
                 "count": len(items),
                 "items": items,
-                "formatted": format_code_list(items) if items else "",
+                "formatted": format_code_list(items, code_source=coded_from) if items else "",
             })
 
         routes.extend([

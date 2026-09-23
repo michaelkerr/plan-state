@@ -56,6 +56,11 @@ class TestInstantiate:
         names = [i["name"] for i in items]
         assert any("Bed 1" in n for n in names)
         assert any("Bed 2" in n for n in names)
+        for item in items:
+            _assert_no_placeholders(item["trigger_def"])
+            _assert_no_placeholders(item["checklist"])
+        seed = next(i for i in items if i["name"] == "Start brassica seeds indoors")
+        assert seed["trigger_def"]["date"] == "2026-10-20"
 
     def test_lawn(self, db):
         from dispatch.instantiate import instantiate
@@ -73,6 +78,9 @@ class TestInstantiate:
             items = get_items(conn, domain="lawn")
         names = [i["name"] for i in items]
         assert any("pre-emergent" in n.lower() for n in names)
+        pre = next(i for i in items if "pre-emergent" in i["name"].lower())
+        labels = [c["label"] for c in pre["checklist"]]
+        assert any("8000" in label for label in labels)
 
     def test_hunting(self, db):
         from dispatch.instantiate import instantiate
@@ -90,6 +98,10 @@ class TestInstantiate:
         names = [i["name"] for i in items]
         assert any("camera" in n.lower() for n in names)
         assert any("opening" in n.lower() for n in names)
+        opening = next(i for i in items if i["name"] == "Opening day hunt")
+        assert opening["trigger_def"]["date"] == "2026-10-01"
+        late = next(i for i in items if i["name"] == "Late season strategy")
+        assert late["trigger_def"]["date"] == "2026-01-15"
 
     def test_missing_required_param(self, db):
         from dispatch.instantiate import instantiate
@@ -116,6 +128,17 @@ class TestInstantiate:
         for item in items:
             tdef = item["trigger_def"]
             _check_refs(tdef, all_ids)
+
+
+def _assert_no_placeholders(value):
+    if isinstance(value, str):
+        assert "{" not in value, value
+    elif isinstance(value, list):
+        for v in value:
+            _assert_no_placeholders(v)
+    elif isinstance(value, dict):
+        for v in value.values():
+            _assert_no_placeholders(v)
 
 
 def _check_refs(tdef, valid_ids):

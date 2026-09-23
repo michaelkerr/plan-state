@@ -1,6 +1,6 @@
 ---
 name: briefing
-description: Generate a morning briefing or evening nudge from dispatch. Use at scheduled times (6:15 AM briefing, 5 PM nudge) or when the user asks what's happening today.
+description: Re-run or re-trigger the morning briefing with curl -sf http://plansync-new:8082/api/briefing and send that text unchanged. Never curl reach-plansync. Also for what's due today and the 5 PM nudge.
 version: 1.0.0
 author: plansync
 ---
@@ -16,12 +16,10 @@ directly from the database.  No LLM tokens are spent on data gathering
 Run: `dispatch briefing`
 
 The output includes:
-- **Due today** — items with today's due date
-- **Overdue** — items past their due date
-- **Newly triggered** — items that fired in the last 24 hours
-- **This week** — upcoming items within 7 days
-- **Weather** — today's conditions by location
-- **Quick close codes** — stable codes (G1, L2) for fast completion
+- **Conditions** — directly under the title. Location, today's weather, and any trigger condition still being watched.
+- **Overdue** — still due, date before today. Every line has a close code.
+- **Due today** — due date is today. Every line has a close code.
+- **The next 7 days** — still open, date inside the next 7 days, not already listed above. Every line has a close code. A `~` line has not reached its date yet; `done` still closes it and `skip` still drops it.
 
 Deliver the output to Telegram as-is.  The briefing is already formatted
 for chat — do not rewrite or summarize it.
@@ -33,12 +31,21 @@ Run: `dispatch nudge`
 The output lists items still due today with completion codes.
 If the output is empty, send nothing (silent when clear).
 
-When there are items, deliver and add: "Reply `done <code>` to close."
+When there are items, deliver and add: "Reply `done <code>` to close, `skip <code>` to drop."
 
 ## On-demand
 
-When the user asks "what's due?" or "what's happening today?", run
-`dispatch briefing` and deliver the result.
+When the user says "re trigger the briefing", "re-run the briefing", or
+"what's due":
+
+```bash
+curl -sf http://plansync-new:8082/api/briefing
+```
+
+Send that stdout unchanged. Do not summarize it. Do not call plansync
+MCP tools. Do not run `morning-briefing.sh`. Do not curl
+`http://reach-plansync:8082/api/briefing` — that server is the old
+database.
 
 ## Cron setup
 

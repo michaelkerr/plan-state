@@ -1,37 +1,42 @@
 ---
 name: dispatch
-description: Complete tasks, check status, and manage items in the dispatch execution engine. Use when the user reports something done, asks what's due, or wants to defer a task.
+description: Close, skip, or list dispatch items by nudge codes such as G1, H3, or L1. Use when the user says done, skip, closed, completed, or asks what is open or due. Call the dispatch MCP tools. Do not write a daily log and do not use plansync tools.
 version: 1.0.0
 author: plansync
 ---
 
 # Dispatch
 
-You have access to the dispatch MCP tools for managing condition-aware
-tasks.  These tools operate on **items** — actionable units that are
-`watching` (waiting for a trigger), `due` (triggered and actionable),
-`done`, or `skipped`.
+Nudge and briefing codes (G1, H3, L1) are dispatch items. Closing one
+changes the dispatch database. A daily note is not a completion.
 
-## Available tools
+## Tools
 
-- **status** — Show all open items with stable codes (e.g. G3, L1)
-- **done** — Complete an item by code, name, or ID
-- **defer** — Defer an item to a new date
-- **note** — Add a note or observation to an item
-- **instantiate** — Create items from a path template
-- **undo** — Revert the most recent operation
+Call these exact tools. One call per code.
 
-## Completion workflow
+- `mcp__dispatch__done` — query is the code (`G1`) or a name. Marks it done.
+- `mcp__dispatch__skip` — query is the code. Leaves the list without marking it done. If that tool is not listed, say the item was not skipped. Do not write it to a note instead. If that tool is not listed, say the item was not skipped. Do not write it to a note instead.
+- `mcp__dispatch__status` — open items with the same codes as the nudge.
+- `mcp__dispatch__defer` — query plus new_date (`YYYY-MM-DD`).
+- `mcp__dispatch__note` — query plus text.
+- `mcp__dispatch__undo` — revert the last change.
 
-When the user says they finished something:
+## When the user replies to a nudge
 
-1. Call `done` with their words (e.g. `done("tomatoes")` or `done("G3")`)
-2. If the match is exact, it completes immediately
-3. If ambiguous, the tool returns candidates — ask the user to pick
-4. Include any notes the user mentioned: `done("G3", notes="done early, frost coming")`
+"done G1, H1, skip H3" means three tool calls: done, done, skip.
+Pass each code as `query`. Do not look up an id first.
+If a call returns several matches, ask which one. Do not guess.
 
-Never call `status` just to look up an ID before `done` — the resolver
-handles name/code matching directly.
+## When the user asks what is open
+
+Call `mcp__dispatch__status` and show its `formatted` text.
+Do not call `mcp__plansync__get_domains`, `get_domain_plan`, or `get_upcoming`.
+
+## Do not
+
+- Do not write these codes into a daily log instead of calling the tool
+- Do not read the plansync-briefing skill for this
+- Do not evaluate weather — the hourly job does that
 
 ## Briefing codes
 

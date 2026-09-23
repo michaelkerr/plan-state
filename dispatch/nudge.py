@@ -6,7 +6,7 @@ Includes stable completion codes so the user can reply "done G3".
 
 from datetime import datetime
 
-from dispatch.store import connect, row_to_dict
+from dispatch.store import connect, get_items
 from dispatch.resolve import format_code_list
 
 
@@ -14,19 +14,18 @@ def build_nudge(today=None):
     today = today or datetime.now().strftime("%Y-%m-%d")
 
     with connect() as conn:
-        due = conn.execute(
-            "SELECT * FROM items WHERE status='due' AND due_date <= ? "
-            'ORDER BY domain, "group", sort_order',
-            (today,),
-        ).fetchall()
-        due = [row_to_dict(r) for r in due]
+        all_items = get_items(conn)
+
+    due = [item for item in all_items
+           if item["status"] == "due"
+           and item.get("due_date") and item["due_date"] <= today]
 
     if not due:
         return ""
 
     header = f"Still open — {_short_date(today)}"
-    body = format_code_list(due)
-    footer = "\nReply `done <code>` to close."
+    body = format_code_list(due, code_source=all_items)
+    footer = "\nReply `done <code>` to close, `skip <code>` to drop."
     return f"**{header}**\n{body}\n{footer}"
 
 

@@ -34,7 +34,7 @@ services:
     restart: unless-stopped
     environment:
       - OWM_API_KEY=${OWM_API_KEY}
-      - DISPATCH_LOCATION=${DISPATCH_LOCATION:-Nashville,TN,US}
+      - DISPATCH_LOCATION=${DISPATCH_LOCATION:-Murfreesboro,TN,US}
       - DISPATCH_DB=/data/dispatch.db
       - DISPATCH_CLIENT=hermes
     volumes:
@@ -42,7 +42,7 @@ services:
     networks:
       - infra
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8082/health"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8082/health')"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -52,7 +52,9 @@ volumes:
   plansync-new-data:
 ```
 
-Add `DISPATCH_LOCATION=Nashville,TN,US` to `~/Projects/reach/.env`.
+Add `DISPATCH_LOCATION=Murfreesboro,TN,US` to `~/Projects/reach/.env`.
+
+The new service publishes `127.0.0.1:8083` on the host. The old container keeps `127.0.0.1:8082`. Inside the Docker network the new service is still `http://plansync-new:8082`.
 
 ### 1.3 Start the new container alongside the old
 
@@ -64,8 +66,8 @@ docker compose up -d plansync-new
 ### 1.4 Verify health
 
 ```bash
-# From the host:
-curl -sf http://localhost:8082/health
+# From the host (8083; 8082 is the old container):
+curl -sf http://127.0.0.1:8083/health
 
 # Or from inside the Docker network:
 docker exec reach-gateway curl -sf http://plansync-new:8082/health
@@ -132,7 +134,7 @@ dispatch doctor
 ### 2.4 Run a test eval
 
 ```bash
-docker exec reach-plansync-new dispatch eval --location "Nashville,TN,US"
+docker exec reach-plansync-new dispatch eval --location "Murfreesboro,TN,US"
 ```
 
 Check that weather was pulled and triggers evaluated.
@@ -229,9 +231,9 @@ docker exec reach-gateway hermes cron create \
 
 ### 3.4 Run for a few days in parallel
 
-Both old and new are running.  The old continues to work unchanged.
-The new delivers briefings/nudges via the new cron jobs.  You'll get
-double notifications briefly — that's expected.
+Both containers stay up.  Replace the old plansync cron jobs with the
+dispatch jobs in 3.3.  Do not leave both sets scheduled — that delivers
+two Telegram briefings and two nudges.
 
 **Check for:**
 - Briefings arrive at 6:15 with the new format (includes completion codes)

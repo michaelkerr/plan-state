@@ -7,7 +7,7 @@ module matches against them, or does substring/fuzzy match on names.
 Goal: one tool call to close a task, confirm-if-ambiguous.
 """
 
-from dispatch.store import connect, get_open_items, row_to_dict
+from dispatch.store import connect, get_items, row_to_dict
 
 
 def resolve(query, domain=None):
@@ -16,15 +16,18 @@ def resolve(query, domain=None):
     Returns (matches, exact) where:
       - matches: list of item dicts
       - exact: True if exactly one unambiguous match
+
+    Codes are numbered across every item in the domain, including ones
+    already done or skipped. Closing G7 must not make the old G8 answer
+    to G7 on the next call.
     """
     with connect() as conn:
-        open_items = get_open_items(conn, domain=domain)
+        items = get_items(conn, domain=domain)
 
-    if not open_items:
+    if not items:
         return [], False
 
-    # Assign stable codes: domain initial + index within domain
-    coded = _assign_codes(open_items)
+    coded = _assign_codes(items)
 
     # Try exact code match first (e.g. "G3", "L1", "H5")
     query_upper = query.strip().upper()
@@ -64,10 +67,10 @@ def resolve(query, domain=None):
 
 
 def _assign_codes(items):
-    """Assign stable shortcodes: uppercase first letter of domain + index.
+    """Assign shortcodes: uppercase first letter of domain + index.
 
-    Items are already sorted by domain/group/sort_order from get_open_items.
-    Codes are deterministic for a given set of open items.
+    Pass every item in the domain, in get_items order. The number stays
+    on that row after it is closed.
     """
     coded = []
     domain_counters = {}
@@ -81,9 +84,17 @@ def _assign_codes(items):
     return coded
 
 
-def format_code_list(items):
-    """Format open items with their stable codes for display in nudge/briefing."""
-    coded = _assign_codes(items)
+def format_code_list(items, code_source=None):
+    """Format items with stable codes.
+
+    code_source is every item in the domain, open and closed. Pass it
+    when displaying a subset (the evening nudge) so a code still matches
+    resolve().
+    """
+    source = items if code_source is None else code_source
+    wanted = {item["id"] for item in items}
+    coded = [(item, code) for item, code in _assign_codes(source)
+             if item["id"] in wanted]
     lines = []
     current_domain = None
     for item, code in coded:

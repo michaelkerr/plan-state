@@ -179,11 +179,6 @@ def _cmd_done(args):
         sys.exit(1)
 
     item = matches[0]
-    if item["status"] == "watching":
-        print(f"Item '{item['name']}' is still watching (not yet due). "
-              "Fire it first or wait for trigger.", file=sys.stderr)
-        sys.exit(1)
-
     with connect() as conn:
         batch_id = new_id()
         updated = transition(conn, item["id"], "complete",

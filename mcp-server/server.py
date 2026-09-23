@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import sqlite3
+import urllib.request
 from datetime import date, timedelta
 
 from mcp.server import Server
@@ -948,16 +949,21 @@ async def api_sync(request: Request):
         return PlainTextResponse(f"sync error: {e}\n", status_code=500)
 
 
+def _proxy_dispatch(path):
+    """Fetch briefing or nudge text from the dispatch container.
+
+    During the parallel run, sessions and old cron names still call this
+    host. Serving dispatch here keeps that curl on the new database.
+    """
+    base = os.environ.get("DISPATCH_UPSTREAM", "http://plansync-new:8082").rstrip("/")
+    with urllib.request.urlopen(base + path, timeout=20) as resp:
+        return resp.read().decode()
+
+
 async def api_briefing(request: Request):
     log.info("api_briefing called")
     try:
-        from sync.morning_briefing import build_briefing
-
-        def _build():
-            with connect() as conn:
-                return build_briefing(conn)
-
-        text = await asyncio.to_thread(_build)
+        text = await asyncio.to_thread(_proxy_dispatch, "/api/briefing")
         return PlainTextResponse(text if text.strip() else "No briefing data available.\n")
     except Exception as e:
         log.exception("api_briefing failed")
@@ -967,12 +973,8 @@ async def api_briefing(request: Request):
 async def api_nudge(request: Request):
     log.info("api_nudge called")
     try:
-        from sync.evening_nudge import build_nudge
-        with connect() as conn:
-            msg = build_nudge(conn, date.today().isoformat())
-        if msg:
-            return PlainTextResponse(msg)
-        return PlainTextResponse("")
+        text = await asyncio.to_thread(_proxy_dispatch, "/api/nudge")
+        return PlainTextResponse(text)
     except Exception as e:
         log.exception("api_nudge failed")
         return PlainTextResponse(f"nudge error: {e}\n", status_code=500)

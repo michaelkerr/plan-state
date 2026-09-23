@@ -137,9 +137,10 @@ def _insert_one(conn, tmpl, domain, params, entity_ctx,
     ref = tmpl.get("ref", "")
     source_ref = f"{ref}:{entity_ctx.get('name', '')}" if entity_ctx and ref else ref
 
-    trigger_def = _resolve_trigger_refs(tmpl["trigger"], ref_to_id)
+    trigger_def = _substitute_tree(tmpl["trigger"], ctx)
+    trigger_def = _resolve_trigger_refs(trigger_def, ref_to_id)
 
-    checklist = tmpl.get("checklist", [])
+    checklist = _substitute_tree(tmpl.get("checklist", []), ctx)
 
     item_id = insert_item(
         conn, domain, name, trigger_def,
@@ -166,6 +167,17 @@ def _insert_one(conn, tmpl, domain, params, entity_ctx,
     )
 
 
+def _substitute_tree(value, ctx):
+    """Fill {param} placeholders in strings anywhere in a trigger or checklist."""
+    if isinstance(value, str):
+        return _substitute(value, ctx)
+    if isinstance(value, list):
+        return [_substitute_tree(v, ctx) for v in value]
+    if isinstance(value, dict):
+        return {k: _substitute_tree(v, ctx) for k, v in value.items()}
+    return value
+
+
 def _substitute(template, ctx):
     if not template:
         return template
@@ -174,7 +186,9 @@ def _substitute(template, ctx):
     import re
     def _dot_to_key(m):
         key = m.group(1)
-        return ctx.get(key, m.group(0))
+        if key not in ctx:
+            return m.group(0)
+        return str(ctx[key])
     result = re.sub(r'\{([\w.]+)\}', _dot_to_key, template)
     try:
         return result.format_map(_SafeDict(ctx))

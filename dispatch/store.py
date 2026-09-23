@@ -8,7 +8,7 @@ import json
 import os
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 DEFAULT_DB_PATH = os.path.expanduser("~/.plansync/dispatch.db")
@@ -234,8 +234,9 @@ def log_event(conn, event_type, batch_id=None, **kwargs):
 # --- Status transitions ---
 
 TRANSITIONS = {
-    "watching": {"fire": "due", "skip": "skipped"},
-    "due":      {"complete": "done", "skip": "skipped", "defer": "watching"},
+    "watching": {"fire": "due", "skip": "skipped", "complete": "done"},
+    "due":      {"complete": "done", "skip": "skipped", "defer": "watching",
+                 "unfire": "watching"},
     "done":     {"undo": "due"},
     "skipped":  {"undo": "watching"},
 }
@@ -266,6 +267,11 @@ def transition(conn, item_id, event, batch_id=None, **kwargs):
         updates["completed_at"] = now
         if kwargs.get("notes"):
             updates["notes"] = (item.get("notes") or "") + "\n" + kwargs["notes"]
+    elif event == "unfire":
+        updates["due_date"] = None
+        updates["trigger_fired"] = None
+        old_values["due_date"] = item.get("due_date")
+        old_values["trigger_fired"] = item.get("trigger_fired")
     elif event == "defer":
         new_date = kwargs.get("new_date")
         if not new_date:
@@ -307,38 +313,31 @@ def transition(conn, item_id, event, batch_id=None, **kwargs):
 
 
 def _fire_dependents(conn, completed_id, batch_id):
+    today = datetime.now().strftime("%Y-%m-%d")
     watching = conn.execute(
         "SELECT * FROM items WHERE status='watching'",
     ).fetchall()
     for row in watching:
         item = row_to_dict(row)
         tdef = item["trigger_def"]
-        if _trigger_references(tdef, completed_id):
-            if _after_trigger_ready(conn, tdef, completed_id):
-                transition(conn, item["id"], "fire", batch_id=batch_id)
+        if tdef.get("type") != "after" or tdef.get("item_ref") != completed_id:
+            continue
+        fire_date = _after_fire_date(conn, tdef, today)
+        if fire_date and fire_date <= today:
+            transition(conn, item["id"], "fire", batch_id=batch_id,
+                       due_date=fire_date)
 
 
-def _trigger_references(tdef, item_id):
-    if tdef.get("type") == "after" and tdef.get("item_ref") == item_id:
-        return True
-    if tdef.get("type") == "compound":
-        return any(_trigger_references(t, item_id) for t in tdef.get("triggers", []))
-    return False
-
-
-def _after_trigger_ready(conn, tdef, just_completed_id):
-    if tdef.get("type") == "after":
-        ref = tdef["item_ref"]
-        target = get_item(conn, ref)
-        if target and target["status"] == "done":
-            return True
-        return False
-    if tdef.get("type") == "compound":
-        op = tdef.get("op", "and")
-        results = [_after_trigger_ready(conn, t, just_completed_id)
-                    for t in tdef.get("triggers", [])]
-        return all(results) if op == "and" else any(results)
-    return True
+def _after_fire_date(conn, tdef, today, parent=None):
+    """Date an after-trigger becomes due. None if the parent is not done."""
+    ref = parent if parent is not None else get_item(conn, tdef.get("item_ref"))
+    if not ref or ref["status"] != "done":
+        return None
+    offset = int(tdef.get("offset_days") or 0)
+    if offset > 0 and ref.get("completed_at"):
+        completed = datetime.strptime(ref["completed_at"][:10], "%Y-%m-%d")
+        return (completed + timedelta(days=offset)).strftime("%Y-%m-%d")
+    return today
 
 
 def _defer_trigger(tdef, new_date):

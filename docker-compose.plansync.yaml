@@ -1,42 +1,45 @@
 # docker-compose.plansync.yaml
 #
-# Add this service to your existing Hermes/Reach docker-compose.yml.
-# Or include it via: docker compose -f docker-compose.yml -f docker-compose.plansync.yaml up -d
+# Parallel-run service. Merge onto the Reach compose file:
+#   docker compose -f docker-compose.yml -f /path/to/plan-state/docker-compose.plansync.yaml up -d plansync-new
 #
-# Required env vars in your .env:
-#   OWM_API_KEY=<your OpenWeatherMap API key>
-#   DISPATCH_LOCATION=Nashville,TN,US  (your city)
+# Does not replace the existing `plansync` service. That container keeps
+# host port 8082. This one publishes 127.0.0.1:8083 and is reachable on the
+# Docker network as http://plansync-new:8082.
 #
-# After starting, configure Hermes to connect:
-#   mcp_servers:
-#     plansync:
-#       url: "http://plansync:8082/sse"
+# Required env vars in the Reach .env:
+#   OPENWEATHERMAP_API_KEY=<your OpenWeatherMap API key>
+#   DISPATCH_LOCATION=Murfreesboro,TN,US
+#
+# The image has no curl. The healthcheck uses the Python stdlib, matching
+# Dockerfile.dispatch.
 
 services:
-  plansync:
-    build:
-      context: ${PLANSYNC_PATH:-.}
-      dockerfile: Dockerfile.dispatch
-    container_name: reach-plansync
+  plansync-new:
+    image: plansync-dispatch:latest
+    container_name: reach-plansync-new
     restart: unless-stopped
     environment:
-      - OWM_API_KEY=${OWM_API_KEY}
-      - DISPATCH_LOCATION=${DISPATCH_LOCATION}
+      - OWM_API_KEY=${OPENWEATHERMAP_API_KEY}
+      - DISPATCH_LOCATION=${DISPATCH_LOCATION:-Murfreesboro,TN,US}
       - DISPATCH_DB=/data/dispatch.db
       - DISPATCH_CLIENT=hermes
+      - TZ=${TZ:-America/Chicago}
     volumes:
-      - plansync-data:/data
+      - plansync-new-data:/data
+    ports:
+      - "127.0.0.1:8083:8082"
     networks:
       - infra
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8082/health"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8082/health')"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
 
 volumes:
-  plansync-data:
+  plansync-new-data:
 
 networks:
   infra:
