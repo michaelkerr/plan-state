@@ -1,33 +1,32 @@
 ---
 name: plansync-domain-authoring
-description: Plan or grow a life domain (garden, yard, lawn, hunting, health, home maintenance) in the plan-state/Reach system. Use when the user wants to plan a season or project ("help me plan my fall garden", "set up my hunting season"), add activities to an existing domain ("add tomatoes to my garden"), or restructure domain plans. Runs the authoring conversation, then loads the result via the plansync MCP tools.
+description: Plan a life domain (garden, yard, lawn, hunting, home maintenance) or build a path template in the dispatch/Reach system. Use when the user wants to plan a season ("help me plan my fall garden", "set up my hunting season"), needs a plan no existing template covers ("make a template for spring garlic"), or wants to close, defer, or list items. Runs the conversation, then calls the dispatch MCP tools.
 ---
 
-# Plansync domain authoring (Claude wrapper)
+# Dispatch domain and path authoring (Claude wrapper)
 
-The canonical skill lives in the plan-state repo and is shared with Reach
-(Hermes/Telegram) so both agents author by identical rules. Do not duplicate
-its content here — read it and follow it exactly:
+The canonical skills live in the plan-state repo and are shared with Reach
+(Hermes/Telegram) so both agents follow identical rules. Do not duplicate
+their content here — read the one that fits and follow it exactly:
 
-1. **Read** `/Users/michaelkerr/Projects/plan-state/skills/domain-authoring.md`
-   — conversation flow, domain-scoping rules, activity-vs-step rule,
-   trigger-format reference, validation rules, and complete examples.
+- **Set up a domain from a path** (existing template):
+  `/Users/michaelkerr/Projects/plan-state/skills/plan-state/SKILL.md`
+- **Build or edit a path template** (nothing existing fits):
+  `/Users/michaelkerr/Projects/plan-state/skills/path-authoring/SKILL.md`
+- **Close, skip, defer, or list items by code** (G1, L2):
+  `/Users/michaelkerr/Projects/plan-state/skills/dispatch/SKILL.md`
 
-2. **Tools** are on the `plansync` MCP server (`mcp__plansync__*`):
-   `get_domains`, `get_domain_plan`, `load_domain`, `add_activities`,
-   `update_activity`, `complete_activity`, `defer_activity`,
-   `add_observation`, `get_upcoming`, `get_weather_current`.
-   If they appear as deferred tools, load them with ToolSearch first.
+**Tools** are on the `dispatch` MCP server (`mcp__dispatch__*`):
+`status`, `done`, `skip`, `defer`, `note`, `instantiate`, `draft_path`,
+`undo`. If they appear as deferred tools, load them with ToolSearch first.
 
 Claude-specific notes:
 
 - Writes are attributed `source='claude'` automatically (the MCP server is
-  launched with `PLANSYNC_CLIENT=claude`); nothing to configure.
-- There are NO single-shot create tools: a new domain goes through
-  `load_domain`, growth of an existing domain through `add_activities`
-  (a single new activity is a one-element array).
-- Do not evaluate weather conditions during the planning conversation —
-  the daily cron does that. Author trigger definitions and let it run.
-- After loading, call `get_upcoming` and show the user what was created and
-  what fires soonest. The domain will appear in the next morning's Telegram
-  briefing automatically.
+  launched with `DISPATCH_CLIENT=claude`); nothing to configure.
+- The old plansync tools (`load_domain`, `add_activities`,
+  `complete_activity`, ...) are retired. Do not look for them.
+- Do not evaluate weather conditions while planning — the hourly job does
+  that.
+- After instantiating, call `status` and show what was created. New items
+  appear in the next morning's Telegram briefing automatically.

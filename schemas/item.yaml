@@ -100,7 +100,7 @@ trigger_calendar:
     prep_days:
       type: integer
       default: 0
-      description: "Item becomes due this many days before the target date"
+      description: "Item becomes due this many days before the target date (negative = after)"
 
 trigger_condition:
   type: object

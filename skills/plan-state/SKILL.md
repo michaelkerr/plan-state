@@ -24,11 +24,14 @@ Walk the user through these steps:
    - Lawn: zones (front, back, side — if different treatment)
    - Home: systems (HVAC, roof, appliances)
 4. **Set parameters** — zone, frost dates, season dates, acreage, etc.
-5. **Choose paths** — which templates to instantiate:
-   - `garden-fall` — cool-season vegetable garden
-   - `lawn-cool-season` — cool-season grass annual care
-   - `hunting-bow` — whitetail bow season
-6. **Instantiate** — call `instantiate` with the path and filled params
+5. **Choose paths** — call `status` and read `paths` for what is
+   available.  Built-ins are `garden-fall`, `lawn-cool-season`, and
+   `hunting-bow`; the user may also have custom paths.  If nothing fits,
+   switch to the path-authoring skill to build one first.
+6. **Preview** — call `draft_path` with `path_id` and the filled params,
+   and show the user each item with its `when` text before creating
+   anything
+7. **Instantiate** — call `instantiate` with the path and filled params
 
 ## Example conversation
 
@@ -37,7 +40,8 @@ User: "Help me set up my fall garden"
 You:
 - Ask about beds (how many, names, what's in them)
 - Ask about zone and frost dates
-- Show what `garden-fall` will create
+- Call `draft_path(path_id="garden-fall", params=...)` and show what it
+  will create and when
 - Confirm, then call `instantiate("garden-fall", "garden", params)`
 
 ## Season turnover

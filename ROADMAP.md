@@ -2,24 +2,27 @@
 
 ## Product summary
 
-PlanSync is a condition-aware activity orchestrator for personal life domains — yard care, gardening, hunting. It stores structured plans in SQLite, evaluates weather triggers hourly, cascades dates through prep/follow-up chains, and delivers briefings via Telegram. Deployed as a capability inside a Hermes Agent instance (Reach) on a Mac Mini. Three domains in production.
+dispatch is a condition-aware task system for personal life domains — lawn, garden, hunting, home. Reusable YAML path templates are instantiated into items with triggers; an hourly deterministic job evaluates weather and fires them; Telegram briefings carry one-code completions ("done G1"). Runs as the `reach-plansync-new` container next to Hermes Agent (Reach) on a Mac Mini. The legacy plansync system is disabled and awaiting removal (MIGRATION.md Phase 4).
 
 ## What's built
 
-- **Plan store**: domains, activities with trigger definitions (calendar, condition, dependency, compound), steps with cascading dates, weather-condition evaluation cache, source-attributed activity log with batch-grouped undo
-- **MCP server**: 15 tools for plan CRUD — load/sync domains, add/update/complete/defer/delete activities, add/update steps, undo, observations, upcoming view, weather queries. Shared by Hermes and Claude as peer agents. Error responses use `isError` flag for proper MCP protocol signaling
-- **Hourly sync pipeline**: deterministic (zero LLM tokens) — weather pull, condition evaluation, trigger firing, date cascade, overdue promotion. Five independent stages, each callable alone
-- **Telegram surfaces**: LLM morning briefing at 6:15, deterministic evening nudge at 5 PM (silent when clear)
-- **State machines**: all status changes route through transition tables with a cascade reactor; batch_id groups operations for undo
-- **Authoring module**: validation, insertion, sync, and ref resolution extracted to plansync/authoring.py — testable without MCP, reusable from future CLI
-- **Declarative plan sync**: load_domain diffs declarations against DB state, creates/updates/flags without deleting
-- **Dossier export**: per-domain markdown state files for sessions without MCP access
+- **Item store**: items with calendar / condition / after / compound triggers, soft checklists, provenance (`source_ref`, `path_id`), append-only event log with batch undo
+- **Hourly eval**: deterministic (zero LLM tokens) weather pull, consecutive-day condition cache, trigger firing. Negative `prep_days` fires after the anchor date
+- **Telegram surfaces**: deterministic morning briefing (6:15) and evening nudge (5 PM, silent when clear) with stable completion codes
+- **MCP server**: 8 tools — `status`, `done`, `skip`, `defer`, `note`, `instantiate`, `draft_path`, `undo`. Hermes over SSE, Claude Desktop over stdio (`docker exec`), attributed via `DISPATCH_CLIENT`
+- **Path templates**: 3 built-in examples plus user-authored custom paths saved to the data volume. Validation (structural errors + warnings) gates save and instantiate; `draft_path` / `dispatch check-path` preview each item with a plain-English fire date; param defaults applied
+- **Skills**: dispatch (completions by code), plan-state (domain setup from a path), path-authoring (build a template), briefing — shared by Hermes and Claude
+- **plan-state library**: generic domain context schema, reconcile, YAML and Obsidian adapters
 
 ## Now
 
 ### Briefing verbosity — DONE
 - **Type**: improvement
 - **Notes**: Root cause was the `_section_due` function mixing overdue and today items with no bundling or cap, plus verbose `Domain — Group: Activity: Step` labels. Fixed by splitting into `_section_today` (today only) and `_section_overdue` (bundled by activity, capped at 5). Dropped domain/group prefix; switched to short dates (Aug 5). Production output went from ~25 verbose lines to ~18 compact lines. 13 new tests.
+
+### Path template authoring — DONE
+- **Type**: feature
+- **Notes**: `dispatch/paths.py` validates templates (unknown trigger types, field typos, forward/unknown `after` refs, unsupported metrics, placeholder mistakes, bad dates) and previews them with plain-English fire dates. `draft_path` MCP tool and `dispatch check-path` CLI expose it; `save=true` writes custom templates to `/data/paths`. `instantiate` now refuses invalid templates and applies param defaults (lawn `lawn_sqft` was never filled). New `skills/path-authoring` skill runs the conversation. Fixed negative `prep_days` being ignored (rut hunt and garden cleanup fired on the anchor date). Claude Desktop switched to dispatch; Claude wrapper skill rewritten. 47 new tests.
 
 ### Easier completions
 - **Type**: improvement
@@ -39,9 +42,21 @@ PlanSync is a condition-aware activity orchestrator for personal life domains �
 - **Done when**: Each domain has only activities/steps that are genuinely useful day-to-day. No "fire and forget" items cluttering the overdue list.
 - **Touches**: Domain definitions in /opt/data/plansync/domains/, MCP tools (complete/defer/delete_activity)
 - **Risk**: Deleting an activity the user actually wants. Confirm before removing.
+- **Notes**: The built-in templates need the same audit — run `dispatch check-path <id>` with real params. Found so far: garden-fall gates fall greens "not before" the frost date itself; lawn-cool-season hardcodes 2026 dates and describes a soil-temp trigger that actually reads air temp; unused params (`zone`, `grass_type`, `stands`, `plots`).
+
+### Back up the dispatch DB
+- **Type**: bug (data safety)
+- **What it does**: `dispatch.db` and custom paths live on the `plansync-new-data` Docker volume, outside `$REACH_DATA_PATH`, so the nightly backup does not cover them. Move `/data` to a bind mount under reach-data (APFS, WAL-safe) or add the volume to the backup job.
+- **Done when**: A restore from last night's backup recovers the dispatch DB and custom paths.
+- **Touches**: ../reach/docker-compose.yml (plansync-new volumes), backup job, MIGRATION.md
+- **Risk**: Moving the volume while the container runs; copy with the container stopped.
 - **Notes**:
 
 ## Next
+
+- **Retire legacy Hermes skills** (tech debt): `skills/plansync.md`, `skills/domain-authoring.md`, and `skills/plansync-briefing.md` still load in Hermes via external_dirs but reference the disabled plansync tools. A "plan my garden" request can pick the old domain-authoring skill. Remove or disable them with MIGRATION.md Phase 4.
+- **Per-entity dependencies** (feature): an `after` trigger pointed at a per-entity item resolves to the last entity's copy only, so "fertilize Bed 1 21 days after Bed 1 transplant" is not expressible. `draft_path` warns about it.
+- **`after` with `event: fired`** (bug): eval ignores the event type and fires as soon as the referenced item exists. Validation rejects `fired` until eval handles it.
 
 - **Calendar/timeline view** (feature): A visual view of upcoming activities across domains — calendar or timeline format. Probably a published artifact reading from dossier or DB export.
 - **Completion from nudge** (improvement): The evening nudge lists open items but offers no fast path to close them. Add inline completion suggestions or a numbered shorthand.

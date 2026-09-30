@@ -205,7 +205,7 @@ def _check_trigger(conn, tdef, today, item_id):
         target = tdef["date"]
         prep = tdef.get("prep_days", 0)
         fire_date = target
-        if prep > 0:
+        if prep:
             dt = datetime.strptime(target, "%Y-%m-%d") - timedelta(days=prep)
             fire_date = dt.strftime("%Y-%m-%d")
         if today >= fire_date:

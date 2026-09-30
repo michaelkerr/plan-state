@@ -3,9 +3,15 @@
 # Plan-State
 
 ## What this is
-A condition-aware activity orchestrator for personal life domains (lawn care, gardening, hunting). It turns LLM-generated domain plans into managed, condition-aware tasks that re-cascade automatically when things slip, complete, or change. Deployed as a capability that registers into a running Hermes Agent instance (branded "Reach") on a Mac Mini home server. Telegram is the sole task surface: an hourly cron pipeline (zero LLM tokens, local delivery) pulls weather, evaluates triggers, and cascades dates; an LLM morning briefing at 6:15 reads the 6:00 run's output, and a deterministic evening nudge at 5 PM lists anything still open (silent on clear days). Completions are conversational -- the user tells Reach (Telegram) or Claude, which calls complete_activity. Hermes and Claude are peer agents of the same engine: both use the same MCP server and authoring skill, with writes distinguished by source attribution (docs/claude-setup.md covers the Claude side). Per-domain dossier files (`/opt/data/plansync/domains/{slug}/dossier.md`, regenerated hourly) orient sessions without MCP access.
+A condition-aware task system for personal life domains (lawn, garden, hunting, home). Reusable YAML **path templates** are instantiated into **items** with triggers (date, weather, another item finishing, or a mix). An hourly deterministic job (zero LLM tokens) pulls weather and fires triggers; a morning briefing (6:15) and evening nudge (5 PM, silent when clear) go to Telegram with stable completion codes like `G1` or `L2`. The user replies "done G1" to Reach (Hermes, on Telegram) or tells Claude, and the agent calls the `done` tool. Hermes and Claude are peer clients of the same MCP server, with writes attributed by `DISPATCH_CLIENT`.
 
-**Repo = code, reach-data = state.** This repo contains only source: engine, MCP server, sync pipeline, skills, schema, tests. All data — the DB, domain definitions, dossiers, reference docs, rotation configs, sync output — lives under `/opt/data/plansync/` (host: `$REACH_DATA_PATH/plansync/`, backed up nightly). Never commit domain data or runtime output to this repo.
+The repo holds two packages (see INTENTS.md for the design intent):
+- **dispatch** -- the execution engine and the only running service: SQLite store, trigger evaluation, briefing/nudge, completion-code resolver, path instantiation and template checking, MCP server + HTTP API + CLI.
+- **planstate** -- plan quality library/CLI (no server): generic domain context schema, reconcile (dispatch items vs domain context), knowledge-base adapters (YAML, Obsidian).
+
+**Repo = code, data volume = state.** The repo holds code, schemas, skills, and the three built-in example paths. Runtime state -- the dispatch DB and user-authored custom paths -- lives in the container's `/data` volume. Never commit domain data, custom paths, or runtime output.
+
+**Legacy system still in the repo.** `plansync/`, `mcp-server/`, `sync/`, `schema.sql`, and the `reach-plansync` container are the pre-dispatch system. Hermes has it disabled (`enabled: false` in Reach's config.yaml) and Claude Desktop no longer points at it. It stays until MIGRATION.md Phase 4 removes it; do not build new features on it.
 
 ## Work protocol
 - The roadmap lives in ROADMAP.md. Read it at the start of every session.
@@ -29,108 +35,94 @@ A condition-aware activity orchestrator for personal life domains (lawn care, ga
 
 ## Tech stack
 - **Language**: Python 3 (no type hints in existing code)
-- **Database**: SQLite 3, WAL journal mode, lives at `/opt/data/plansync/plansync.db` (APFS-backed Hermes data dir -- NEVER on the exFAT/VirtioFS repo mount, where WAL fails), foreign keys enabled
-- **MCP server**: `mcp>=1.0.0` (stdio JSON-RPC)
-- **HTTP clients**: `requests` (weather API)
-- **Weather**: OpenWeatherMap API (current + forecast)
-- **Runtime**: Docker container running Hermes Agent, deployed on Mac Mini
-- **Messaging**: Telegram (via Hermes gateway)
-- **LLM**: Local model via Ollama (LAN machine) for automated tasks; cloud LLM for interactive sessions
+- **Database**: SQLite 3, WAL, at `DISPATCH_DB` (container: `/data/dispatch.db` on the `plansync-new-data` Docker volume; default `~/.plansync/dispatch.db`)
+- **MCP**: `mcp>=1.0.0,<2` -- SSE over HTTP (Hermes) or stdio (Claude Desktop, plugin installs)
+- **HTTP**: Starlette + uvicorn for MCP SSE and the `/api/*` endpoints
+- **Templates**: YAML (`pyyaml`)
+- **Weather**: OpenWeatherMap current + forecast (`requests`)
+- **Runtime**: `reach-plansync-new` container built from `Dockerfile.dispatch`, alongside Hermes Agent (Reach) on a Mac Mini
+- **Messaging**: Telegram via the Hermes gateway
 
 ## Architecture overview
-Three-layer architecture: a shared engine (plansync/engine.py) for DB access, state machines, and cascade logic; an MCP server (mcp-server/server.py) for interactive tools; and a sync pipeline (sync/) for deterministic cron evaluation. All three read/write the same SQLite database. See ARCHITECTURE.md for the component map, data flow, and deployment topology.
+One service (dispatch) owns the DB. Three callers: the MCP tools (interactive, Hermes and Claude), the HTTP API (Hermes cron jobs curl `/api/eval`, `/api/briefing`, `/api/nudge`), and the CLI (inside the container or locally). Everything reads live DB state at call time -- no dossiers, no daily JSON. See ARCHITECTURE.md for the component map and data flow.
 
 ## Project structure
 ```
 plan-state/
-├── register.sh                 # Installs app into running Hermes instance
-├── schema.sql                  # SQLite schema (tables, indexes, views)
-├── init-db.py                  # Database initializer
-├── ROADMAP.md                  # Priority-bucketed work management
-├── ARCHITECTURE.md             # Component map, data flow, deployment topology
-├── DECISIONS.md                # Architectural decision log
-├── pyproject.toml              # Package config: plansync installable, pytest pythonpath
-├── plansync/
-│   ├── engine.py               # Shared engine: DB access, state machines, cascade, view queries
-│   └── authoring.py            # Plan authoring: validation, insertion, sync, ref resolution
-├── mcp-server/
-│   ├── server.py               # MCP server: 15 tools over SSE (Starlette + uvicorn)
-│   └── requirements.txt        # mcp>=1.0.0
-├── sync/
-│   ├── sync_pipeline.py        # Hourly deterministic pipeline (5 independent stages)
-│   ├── morning_briefing.py     # 6:15 AM deterministic briefing (today/overdue/week/conditions/weather)
-│   ├── evening_nudge.py        # 5 PM "still open today" (silent when clear)
-│   ├── briefing_context.py     # Older LLM-mediated briefing (replaced by morning_briefing.py)
-│   ├── export_dossier.py       # Per-domain markdown state files
-│   ├── export_domain_json.py   # DB → re-importable domain JSON
-│   └── requirements.txt        # requests
-├── scripts/                    # Cron wrappers (copied into container by register.sh)
-│   ├── sync.py                 # Delegates to sync_pipeline.py + export_dossier.py
-│   ├── briefing-context.py     # Delegates to briefing_context.py
-│   ├── briefing-context.sh     # Shell wrapper for briefing-context.py
-│   ├── evening-nudge.py        # Delegates to evening_nudge.py
-│   └── migrate-*.py            # One-time DB migrations (historical; already applied)
-├── skills/                     # Hermes skills (loaded via external_dirs, live immediately)
-│   ├── plansync.md             # MCP tool workflow and trigger format reference
-│   ├── plansync-briefing.md    # Morning briefing generation instructions
-│   └── domain-authoring.md     # Guides LLM through domain planning conversation → load_domain
-├── claude-skills/              # Claude-side skills, symlinked into ~/.claude/skills/
-│   └── plansync-domain-authoring/SKILL.md   # Thin wrapper over skills/domain-authoring.md
-├── tests/                      # 30 test files, 344 tests
-└── docs/
-    ├── claude-setup.md         # Claude desktop MCP registration + verification
-    └── archive/                # Frozen: v1 spec, shelved v2 PRD, v1 build plan
+├── INTENTS.md               # Design intent: two-layer model, vocabulary, non-goals
+├── MIGRATION.md             # Old plansync → dispatch parallel-run cutover
+├── ROADMAP.md / ARCHITECTURE.md / DECISIONS.md
+├── Dockerfile.dispatch      # The running image (reach-plansync-new)
+├── docker-compose.plansync.yaml  # Compose override for the parallel-run service
+├── plugin.json, mcp.json    # Agent Plugins v1 packaging (Hermes plugin install)
+├── pyproject.toml           # Installs `dispatch` and `plan-state` CLIs
+├── dispatch/
+│   ├── store.py             # Schema, connections, items CRUD, transitions, event log
+│   ├── eval.py              # Weather pull, condition cache, trigger firing
+│   ├── paths.py             # Path templates: load/list, validate, expand, preview, save
+│   ├── instantiate.py       # Validated template → items in the DB
+│   ├── resolve.py           # Code/name/ID resolver and stable code assignment
+│   ├── briefing.py, nudge.py# Deterministic Telegram text
+│   ├── doctor.py            # Health checks (/health)
+│   ├── server.py            # MCP tools + HTTP API
+│   └── cli.py               # `dispatch ...`
+├── planstate/               # context.py, reconcile.py, adapters/, cli.py (`plan-state ...`)
+├── schemas/                 # item.yaml, path.yaml, event.yaml, domain_context.yaml
+├── paths/                   # Built-in example templates (garden-fall, lawn-cool-season, hunting-bow)
+├── skills/                  # Hermes skills, loaded live via external_dirs
+│   ├── dispatch/            # Close/skip/defer/list by code
+│   ├── plan-state/          # Set up a domain from a path
+│   ├── path-authoring/      # Build a new path template with draft_path
+│   └── briefing/            # Briefing presentation
+├── claude-skills/           # Claude wrappers pointing at skills/ (symlinked into ~/.claude/skills)
+├── scripts/dispatch-*.sh    # Cron wrappers: curl the dispatch HTTP API
+├── tests/                   # test_dispatch, test_paths, test_path_authoring, test_planstate + legacy tests
+└── (legacy) plansync/, mcp-server/, sync/, schema.sql, Dockerfile, register.sh
 ```
 
-**Sibling repo**: `../reach/` contains Hermes infrastructure (docker-compose.yml, .env). The LIVE Reach data dir is at `$REACH_DATA_PATH` (/Users/michaelkerr/reach-data, mounted at /opt/data) -- `../reach/data/` is only the nightly backup target (mounted at /opt/data-backup); editing config there does nothing. The running containers include `reach-gateway` (main Hermes agent), `reach-plansync` (this project's MCP server + sync pipeline), and `reach-dashboard`; "reach" alone is the compose project name, not a container.
+**Sibling repo**: `../reach/` holds the Hermes compose file and `.env`. Live Hermes config is `$REACH_DATA_PATH/config.yaml` (`/Users/michaelkerr/reach-data/config.yaml`); `../reach/data/` is only the backup target. Containers: `reach-gateway` (Hermes), `reach-plansync-new` (dispatch, host port 8083), `reach-plansync` (legacy, host port 8082), `reach-dashboard`.
 
-**Deployment**: The `reach-plansync` container is built from this repo's Dockerfile. Code is COPY'd into the image at build time (not volume-mounted -- see D14). Code changes require a rebuild: `cd ../reach && docker compose build plansync && docker compose up -d plansync`. The data volume (`/opt/data/plansync/`) is mounted for DB and domain data. The MCP server runs on port 8082 (SSE transport); Claude Desktop connects via `"url": "http://localhost:8082/sse"` in claude_desktop_config.json. Hermes connects via the Docker network (`http://plansync:8082`). Skills are loaded into Hermes via `external_dirs` (still live-editable via the reach-gateway volume mount of the repo's skills/ directory).
+**Deployment**: Code is COPY'd into the image. After code changes: `docker build -f Dockerfile.dispatch -t plansync-dispatch:latest . && cd ../reach && docker compose up -d plansync-new`. Hermes reaches MCP at `http://plansync-new:8082/sse`. Claude Desktop runs `docker exec -i -e DISPATCH_CLIENT=claude reach-plansync-new dispatch serve --stdio` (restart Claude Desktop after changing its config). Skills are live: Hermes loads `/opt/projects/plan-state/skills` via `external_dirs`.
 
 ## Module guide
-- **State machines**: plansync/engine.py — ACTIVITY_TRANSITIONS, STEP_TRANSITIONS, transition(), react(). All status changes go through here.
-- **Plan authoring**: plansync/authoring.py — validate_domain_definition(), validate_activities(), insert_activity(), sync_domain(), resolve_refs(). Returns plain data; server.py wraps in ok()/err().
-- **Activity lifecycle**: mcp-server/server.py — _complete_activity(), _defer_activity(), _delete_activity(), _undo(). Each calls transition()+react(), shares a batch_id.
-- **Weather evaluation**: sync/sync_pipeline.py — pull_weather(), evaluate_conditions(), _eval_temperature(), _eval_weather_event(). Temperature sustained-days logic in _eval_temperature().
-- **Trigger logic**: sync/sync_pipeline.py — evaluate_triggers(), _check_trigger(). Recursive for compound triggers. Calendar triggers fire at prep-window start (target - max_prep_lead_days).
-- **View layer**: schema.sql — open_steps, actionable_items, open_activities views. engine.py — get_actionable_items(), get_open_activities(). Used by nudge, briefing, and get_upcoming.
-- **Morning briefing**: sync/morning_briefing.py — build_briefing(). Six sections: fires, today, overdue (bundled by activity, capped at MAX_OVERDUE), this week (capped per domain), conditions, weather. Deterministic, zero LLM tokens.
-- **Dossier export**: sync/export_dossier.py — render_domain(), render_rotation(). Reads rotation.json for garden-year position.
-- **Cron wrappers**: scripts/ — thin delegators copied into /opt/data/scripts/ by register.sh. The actual logic is in sync/ (baked into the container image).
+- **Status changes**: dispatch/store.py -- `TRANSITIONS`, `transition()`. Statuses: `watching` → `due` → `done`/`skipped`. Completing an item fires its `after` dependents.
+- **Triggers**: dispatch/eval.py -- `_check_trigger()` (recursive for compound). Calendar fires at `date - prep_days` (negative prep_days = after the date). Condition fires when every cached rule `is_met` and `earliest_date` has passed.
+- **Path templates**: dispatch/paths.py -- `validate_path()` (structural errors/warnings), `validate_params()`, `apply_defaults()`, `expand_items()`, `check_path()` (validate + preview with plain-English `when`), `save_path()`.
+- **Instantiation**: dispatch/instantiate.py -- refuses invalid templates, applies defaults, inserts items, resolves `after` refs to IDs in insertion order.
+- **Completion codes**: dispatch/resolve.py -- stable per-domain codes (`G1`), resolver for code/name/ID.
+- **Briefing / nudge**: dispatch/briefing.py, dispatch/nudge.py -- deterministic, zero LLM tokens.
+- **MCP tools** (dispatch/server.py): `status`, `done`, `skip`, `defer`, `note`, `instantiate`, `draft_path`, `undo`.
 
 ## Conventions
-- Database IDs are 12-char hex strings from `uuid4().hex[:12]`
-- All DB connections go through `engine.get_db()` or `engine.connect()` (context manager). `busy_timeout=5000`, `foreign_keys=ON`. Journal mode is a persistent DB property set at init/migration: WAL at the APFS location. Never create or move the DB onto the exFAT/VirtioFS mount (WAL breaks there, see DECISIONS.md D5)
-- JSON fields in SQLite are stored as TEXT, deserialized on read via `row_to_dict()`
-- MCP tool responses use `ok(data)` → `CallToolResult` or `err(message)` → `CallToolResult(isError=True)`. Error responses use the `isError` flag so MCP clients can distinguish errors from data
-- Trigger definitions are JSON objects with a `type` field: `calendar`, `condition`, `dependency`, `compound`
-- The cron pipeline is deterministic (zero LLM tokens). LLM reasoning happens only in interactive sessions and the morning briefing
-- Step dates cascade automatically from activity trigger dates (prep = trigger - lead_days, follow_up = trigger + lead_days)
-- Activities carry an optional free-form `group_name` for within-domain bundling (crop, bed, species). Display/organization only -- trigger logic comes from dependency chains, never groups
-- A domain = one location/weather context. Activity vs step: needs its own trigger (date, weather, dependency) → activity; fixed-offset chore around a triggered event → step
-- weather_log holds ONE row per location per local day, enforced by `UNIQUE(location, weather_date)`. The upsert is `INSERT ... ON CONFLICT DO UPDATE`. Daily high/low are derived from the 3-hourly forecast via derive_daily_range(), not the snapshot
-- Conditions rows are DERIVED from trigger_def condition leaves at load/update time (engine.derive_conditions); definitions with an explicit `conditions` array are rejected. The conditions table is an evaluation cache (is_met/current_value), never authored directly
-- One authoring path: load_domain (new domain) / add_activities (grow a domain). One modification path: update_activity / update_step / complete_activity / defer_activity / delete_activity (soft skip by default, permanent=true erases)
-- Deferral is a date move, not a status: defer_activity requires new_date, rewrites trigger_def via engine.defer_trigger_def, returns the activity to 'watching' so the cron re-fires it. There is no 'deferred' status
-- No recurrence, no step conditions, no soil_temp -- validation rejects them with actionable errors. Valid condition metrics: daily_high, daily_low, temp_high, temp_low
-- Shared logic lives in `plansync/engine.py`; server.py, sync_pipeline.py, and evening_nudge.py import it and must not define local copies (enforced by tests/test_engine_extraction.py). DB path and client identity resolve from env (`PLANSYNC_DB`, `PLANSYNC_CLIENT`) at call time
-- activity_log source attribution: `cron` (sync pipeline), `hermes`/`claude` (via PLANSYNC_CLIENT env), `human` (reserved)
-- activity_log.batch_id groups all log entries produced by one operation into one reversible unit for undo. log_change takes optional batch_id; standalone entries stay NULL
-- Status changes route through engine.transition() -- validates against transition tables, raises ValueError on invalid moves, returns side-effect events for engine.react(). No raw `UPDATE ... SET status=` anywhere
-- undo reverts one batch: statuses via transition(revert), fields from logged old_values (allowlisted per entity). Undoing an undo is refused; created/observation entries are skipped
+- IDs are 12-char hex from `uuid4().hex[:12]`
+- All DB access goes through `dispatch.store.connect()`; `busy_timeout=5000`, `foreign_keys=ON`
+- DB path, paths dirs, and client identity resolve from env at call time: `DISPATCH_DB`, `DISPATCH_PATHS_DIR` (built-ins), `DISPATCH_USER_PATHS_DIR` (custom, default `<db dir>/paths`), `DISPATCH_CLIENT`
+- JSON fields are TEXT in SQLite, decoded by `row_to_dict()`
+- MCP responses use `ok(data)` / `err(message)` (`isError=True`). Validation results the caller must iterate on (draft_path errors) are data, returned with `ok()`
+- Status changes go through `transition()`; no raw `UPDATE ... SET status=` outside store.py and undo
+- Every write logs to `event_log` with a `batch_id` so `undo` can revert it
+- Items are created only by instantiating a path. New kinds of plans mean a new path template, authored with the path-authoring skill and checked with `draft_path` / `dispatch check-path`
+- Templates are validated before save and before instantiate. Built-in paths cannot be overwritten; custom paths live in the data volume, never the repo
+- Trigger types: `calendar`, `condition`, `after`, `compound`. Condition metrics: `daily_high`, `daily_low`, `temp_high`, `temp_low`. No recurrence, no steps, no soil temperature
+- `after` triggers reference refs defined earlier in the template; `event: fired` is rejected until the engine evaluates it
+- No domain-specific logic in shared code (`if domain == "garden"` never)
+- The hourly job is deterministic. LLM reasoning happens only in interactive sessions
 
 ## Do not
-- Do not use class components or ORM -- raw SQL via sqlite3, schemas in schema.sql
-- Do not evaluate weather conditions during planning conversations -- the cron job handles that
-- Do not delete and recreate activities to modify them -- use update_activity
-- Do not add external service dependencies to the automated cron pipeline without asking the user first
-- Do not forget to rebuild after code changes: `cd ../reach && docker compose build plansync && docker compose up -d plansync` (code is COPY'd into the image, not volume-mounted -- see D14)
-- Do not commit domain data or runtime output to this repo. The repo is code; data lives in reach-data
+- Do not use an ORM -- raw SQL via sqlite3; the schema lives in `dispatch/store.py`
+- Do not evaluate weather during planning conversations -- the hourly job does that
+- Do not insert items directly or hand-write templates into the repo -- go through `instantiate` and `draft_path`
+- Do not add external service dependencies to the hourly job without asking the user first
+- Do not forget to rebuild the dispatch image after code changes (skills are live; code is not)
+- Do not commit domain data, custom paths, or runtime output
+- Do not build on the legacy plansync code
 
 ## Known issues
-- **README.md architecture diagram says daily_sync.py**: Renamed to sync_pipeline.py in Step 49. The README diagram hasn't been updated to match.
+- **Dispatch DB is not in the nightly backup**: it lives on the `plansync-new-data` Docker volume, not under `$REACH_DATA_PATH`. See ROADMAP.md.
+- **README.md describes the legacy system**: setup, how-it-works, and the diagram predate dispatch.
 
 ## Decisions
-See DECISIONS.md for the full log with context, alternatives, and consequences. Key decisions: Hermes Agent as runtime (D1), SQLite/WAL (D2), deterministic cron (D3), Telegram-only surface (D4), DB on APFS (D5), AI-agnostic peer access (D6), derived conditions (D7), transition-table state machines (D8), per-domain directories (D9), data outside repo (D10), deferral as date move (D11), MCP isError flag (D12), authoring extraction (D13), standalone container with copied code (D14).
+See DECISIONS.md for the full log. Decisions D1-D14 cover the legacy plansync system; D15 onward cover dispatch.
 
 
 ## Development Workflow

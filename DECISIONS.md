@@ -143,3 +143,13 @@ Each entry captures a decision that affects how the codebase should evolve. Read
 - **Context**: The previous setup volume-mounted the entire repo into reach-gateway, which was brittle — filesystem differences (exFAT/VirtioFS) caused WAL failures (D5), and the tight coupling between the repo working tree and the running container made it easy to break production with an uncommitted edit. The standalone container with copied code is simpler and more predictable: the running code matches the built image, period.
 - **Alternatives considered**: Keeping the volume mount (faster iteration but fragile); a dev-mode compose override with a volume mount (complexity for a single-developer project).
 - **Consequences**: Code changes require a container rebuild (`docker compose build plansync && docker compose up -d plansync` from the reach directory). The data volume (`/opt/data`) is still mounted. CLAUDE.md's volume-mount documentation needs updating. Claude Desktop connects via SSE URL (`http://localhost:8082/sse`), not `docker exec`.
+
+---
+
+### D15: Custom path templates are data, validated before save and instantiate
+- **Date**: 2026-09-25
+- **Area**: dispatch, path templates
+- **Decision**: User-authored path templates are saved through `draft_path(save=true)` / `dispatch check-path --save` into `DISPATCH_USER_PATHS_DIR` (default `<db dir>/paths`, i.e. the container's `/data` volume), not the repo. Built-in example paths stay in `paths/` and cannot be overwritten. `validate_path()` runs before every save and every `instantiate`; structural errors block, warnings (hardcoded dates, unused params, per-entity dependencies) only inform. Validation lives in `dispatch/paths.py` next to the expansion code so the preview and real instantiation expand templates identically.
+- **Context**: Items can only be created from paths, so a plan the three built-ins don't cover needed a hand-written YAML file baked into the image. The engine silently ignores unknown trigger types and misspelled fields (the item just never fires), so an unchecked template fails invisibly weeks later.
+- **Alternatives considered**: Saving custom templates into the repo (mixes user data with code, needs a rebuild per template); letting agents write files directly (no validation, path traversal risk); a separate `save_path` tool (grows the tool surface; save is one flag on the same check the agent already runs); putting validation in `planstate` (instantiate lives in dispatch and must enforce it).
+- **Consequences**: One new MCP tool (`draft_path`), 8 total. Custom templates share the dispatch DB's backup exposure (see ROADMAP "Back up the dispatch DB"). The Claude Desktop MCP entry now runs `dispatch serve --stdio` in `reach-plansync-new` via `docker exec`.

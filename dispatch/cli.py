@@ -12,6 +12,7 @@ Usage:
     dispatch defer <query> <date>  Defer an item
     dispatch paths          List available path templates
     dispatch instantiate <path_id> <domain> [--param key=value ...]
+    dispatch check-path <file|path_id> [--param key=value ...] [--save]
 """
 
 import argparse
@@ -66,6 +67,16 @@ def main():
     inst_p.add_argument("--params-file", default=None,
                         help="YAML/JSON file with parameters")
 
+    check_p = sub.add_parser("check-path",
+                             help="Validate a path template and preview its items")
+    check_p.add_argument("target", help="Template file (path.yaml) or existing path ID")
+    check_p.add_argument("--param", action="append", default=[],
+                         help="Sample parameter as key=value (repeatable)")
+    check_p.add_argument("--params-file", default=None,
+                         help="YAML/JSON file with sample parameters")
+    check_p.add_argument("--save", action="store_true",
+                         help="Save the file as a custom template if valid")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -94,6 +105,8 @@ def main():
         _cmd_paths()
     elif args.command == "instantiate":
         _cmd_instantiate(args)
+    elif args.command == "check-path":
+        _cmd_check_path(args)
 
 
 def _cmd_init():
@@ -224,9 +237,7 @@ def _cmd_paths():
             print(f"    params: {', '.join(names)}")
 
 
-def _cmd_instantiate(args):
-    from dispatch.instantiate import instantiate
-
+def _parse_params(args):
     params = {}
     # Parse --param key=value args
     for p in args.param:
@@ -246,11 +257,53 @@ def _cmd_instantiate(args):
             else:
                 file_params = yaml.safe_load(f)
             params.update(file_params)
+    return params
 
+
+def _cmd_instantiate(args):
+    from dispatch.instantiate import instantiate
+
+    params = _parse_params(args)
     ids = instantiate(args.path_id, args.domain, params)
     print(f"Instantiated {len(ids)} items from {args.path_id} into domain '{args.domain}'")
     for item_id in ids:
         print(f"  {item_id}")
+
+
+def _cmd_check_path(args):
+    from dispatch.paths import check_path, load_path, parse_path_yaml, save_path
+
+    text = None
+    if os.path.isfile(args.target):
+        with open(args.target) as f:
+            text = f.read()
+        path_def = parse_path_yaml(text)
+    else:
+        path_def = load_path(args.target)
+
+    params = _parse_params(args)
+    result = check_path(path_def, params if (args.param or args.params_file) else None)
+
+    for e in result["errors"]:
+        print(f"ERROR    {e}")
+    for w in result["warnings"]:
+        print(f"WARNING  {w}")
+    if result["preview"]:
+        print("\nWould create:")
+        for item in result["preview"]:
+            group = f"[{item['group']}] " if item["group"] else ""
+            print(f"  {group}{item['name']}")
+            print(f"      due {item['when']}")
+    elif not result["errors"]:
+        print("Structure OK. Pass --param or --params-file to preview the items.")
+
+    if result["errors"]:
+        sys.exit(1)
+    if args.save:
+        if text is None:
+            print("--save needs a template file", file=sys.stderr)
+            sys.exit(1)
+        print(f"\nSaved to {save_path(text)}")
 
 
 if __name__ == "__main__":

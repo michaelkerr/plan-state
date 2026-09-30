@@ -297,9 +297,10 @@ Remove the old `plansync` service definition and its volume.
 
 | Capability | Status | When it returns |
 |---|---|---|
-| Claude Desktop MCP | Temporarily lost | Add `dispatch serve --stdio` to claude_desktop_config.json (roadmap: "Both") |
+| Claude Desktop MCP | Restored 2026-09-25 | `docker exec -i -e DISPATCH_CLIENT=claude reach-plansync-new dispatch serve --stdio` in claude_desktop_config.json |
 | Dossier files | Gone by design | Use `dispatch status` or MCP `status` tool instead |
-| 15 MCP tools | Replaced by 6 | `status`, `done`, `defer`, `note`, `instantiate`, `undo` cover all use cases |
+| 15 MCP tools | Replaced by 8 | `status`, `done`, `skip`, `defer`, `note`, `instantiate`, `draft_path`, `undo` |
+| Ad-hoc activities via `load_domain` | Replaced | Build a custom path with the path-authoring skill (`draft_path`), then `instantiate` |
 | Sync-output JSON | Gone by design | DB is the only truth; briefing reads it directly |
 | Activity/step dual state machine | Simplified | Items + optional checklists; no separate step lifecycle |
 

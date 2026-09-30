@@ -25,6 +25,7 @@ from dispatch.store import (
 )
 from dispatch.resolve import resolve, format_code_list
 from dispatch.instantiate import instantiate, list_paths
+from dispatch.paths import check_path, load_path, parse_path_yaml, save_path
 
 
 app = Server("dispatch")
@@ -135,6 +136,25 @@ async def list_tools():
             },
         ),
         types.Tool(
+            name="draft_path",
+            description=(
+                "Validate a path template and preview the items it would create, "
+                "with plain-English fire dates. Pass `yaml` for a new or edited "
+                "template, or `path_id` to check an existing one. Nothing is "
+                "written unless save=true and the template has no errors; saved "
+                "templates can then be used with `instantiate`."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "yaml": {"type": "string", "description": "Full path template as YAML text"},
+                    "path_id": {"type": "string", "description": "Check an existing template instead"},
+                    "params": {"type": "object", "description": "Sample parameters for the preview"},
+                    "save": {"type": "boolean", "description": "Save as a custom template if valid"},
+                },
+            },
+        ),
+        types.Tool(
             name="undo",
             description="Undo the most recent batch of changes.",
             inputSchema={"type": "object", "properties": {}},
@@ -157,6 +177,8 @@ async def call_tool(name: str, arguments: dict):
             return _note(arguments)
         elif name == "instantiate":
             return _instantiate(arguments)
+        elif name == "draft_path":
+            return _draft_path(arguments)
         elif name == "undo":
             return _undo(arguments)
         else:
@@ -313,6 +335,24 @@ def _instantiate(args):
         "items_created": len(ids),
         "items": items,
     })
+
+
+def _draft_path(args):
+    text = args.get("yaml")
+    path_id = args.get("path_id")
+    if not text and not path_id:
+        return err("Pass either yaml (template text) or path_id (existing template)")
+    if text and path_id:
+        return err("Pass yaml or path_id, not both")
+
+    path_def = parse_path_yaml(text) if text else load_path(path_id)
+    result = check_path(path_def, args.get("params"))
+
+    if args.get("save"):
+        if not text:
+            return err("save needs yaml; an existing template is already saved")
+        result["saved_to"] = save_path(text)
+    return ok(result)
 
 
 def _undo(args):
