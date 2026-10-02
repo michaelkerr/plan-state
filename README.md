@@ -1,6 +1,6 @@
 # Plan-State
 
-Condition-aware tasks for personal life domains — lawn, garden, hunting, home.
+Condition-aware tasks for personal life domains — lawn, garden, hunting, home.....
 
 You describe a season once as a reusable **path template**. Dispatch turns it into items with triggers (a date, the weather, another item finishing, or a mix). An hourly job pulls the forecast and fires what's due. Your agent (Claude Desktop, Cursor, or [Hermes](https://github.com/NousResearch/hermes-agent) on Telegram) lists items as `G1` / `L2` and closes them when you say "done G1".
 
@@ -14,7 +14,7 @@ You ──► agent (MCP) ──► dispatch ──► SQLite
 
 - Python 3.10+ **or** Docker
 - A free [OpenWeatherMap](https://home.openweathermap.org/users/sign_up) API key (new keys can take up to an hour to activate)
-- An MCP client: Claude Desktop, Cursor, or Hermes
+- An MCP client: Claude Desktop, Cursor, Hermes, etc
 
 ## 1. Install
 
@@ -46,7 +46,7 @@ The database defaults to `~/.plansync/dispatch.db`. Custom templates you save la
 
 ## 2. Connect an agent
 
-Skills tell the agent how to talk. MCP gives it the tools. Both are required — opening the repo in Cursor loads skills, not the server.
+Skills tell the agent how to talk. MCP gives it the tools. Both are required.
 
 ### Claude Desktop
 
@@ -140,7 +140,7 @@ Talk to the agent:
 - "Help me set up my fall garden" — instantiates a built-in **template** (`garden-fall`, `lawn-cool-season`, `hunting-bow`) with this season's dates and places. They are not hardcoded calendars.
 - "Make a template for spring garlic" — writes a new path, then you instantiate it
 
-Or from the CLI, after doctor is clean:
+Or from the CLI:
 
 ```bash
 dispatch paths
