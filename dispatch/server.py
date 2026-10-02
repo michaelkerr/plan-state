@@ -11,10 +11,11 @@ Usage:
   dispatch serve --http --port 8082 --api   # Docker sidecar, MCP + HTTP API
 """
 
-import argparse
 import json
 import os
 import sys
+import threading
+import time
 
 from mcp.server import Server
 from mcp import types
@@ -460,17 +461,59 @@ def create_http_app(enable_api=True):
     return Starlette(routes=routes)
 
 
+# --- Built-in scheduler ---
+
+def eval_minutes(value=None):
+    """Minutes between built-in evals; 0 disables (Hermes cron drives eval instead)."""
+    raw = value if value is not None else os.environ.get("DISPATCH_EVAL_MINUTES", "0")
+    try:
+        return max(0, int(raw))
+    except (TypeError, ValueError):
+        return 0
+
+
+def start_eval_loop(minutes):
+    """Run the eval pipeline every `minutes` in a daemon thread.
+
+    For installs with no external scheduler (Claude Desktop, standalone
+    Docker).  Returns the thread, or None when disabled or no location.
+    """
+    location = os.environ.get("DISPATCH_LOCATION", "")
+    if not minutes:
+        return None
+    if not location:
+        print("dispatch: DISPATCH_LOCATION not set; built-in eval disabled",
+              file=sys.stderr)
+        return None
+
+    def _loop():
+        from dispatch.eval import run_eval
+        while True:
+            try:
+                run_eval(location)
+            except Exception as e:
+                print(f"dispatch: eval failed: {e}", file=sys.stderr)
+            time.sleep(minutes * 60)
+
+    thread = threading.Thread(target=_loop, name="dispatch-eval", daemon=True)
+    thread.start()
+    return thread
+
+
 # --- Entry points ---
 
-async def run_stdio():
+async def run_stdio(eval_every=None):
     from mcp.server.stdio import stdio_server
+    init_db()
+    start_eval_loop(eval_minutes(eval_every))
     async with stdio_server() as (read, write):
         await app.run(read, write, app.create_initialization_options())
 
 
-def run_http(port=8082, host="0.0.0.0", enable_api=True):
+def run_http(port=8082, host="0.0.0.0", enable_api=True, eval_every=None):
     import uvicorn
     init_db()
+    start_eval_loop(eval_minutes(eval_every))
     http_app = create_http_app(enable_api=enable_api)
     print(f"dispatch serving on {host}:{port} (MCP SSE at /sse"
           + (", API at /api/*" if enable_api else "") + ")",
@@ -479,22 +522,9 @@ def run_http(port=8082, host="0.0.0.0", enable_api=True):
 
 
 def main():
-    parser = argparse.ArgumentParser(prog="dispatch serve")
-    parser.add_argument("--stdio", action="store_true",
-                        help="Stdio MCP transport (Hermes plugin, Claude Desktop)")
-    parser.add_argument("--http", action="store_true",
-                        help="HTTP/SSE MCP transport (Docker, network)")
-    parser.add_argument("--port", type=int, default=8082)
-    parser.add_argument("--host", default="0.0.0.0")
-    parser.add_argument("--api", action="store_true",
-                        help="Enable HTTP API endpoints (/api/eval, /api/briefing, etc.)")
-    args = parser.parse_args()
-
-    if args.http:
-        run_http(port=args.port, host=args.host, enable_api=args.api)
-    else:
-        import asyncio
-        asyncio.run(run_stdio())
+    from dispatch.cli import main as cli_main
+    sys.argv = ["dispatch", "serve", *sys.argv[1:]]
+    cli_main()
 
 
 if __name__ == "__main__":

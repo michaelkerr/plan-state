@@ -5,9 +5,10 @@ with this module and inserts the result; the draft_path tool and
 `dispatch check-path` use it to validate and preview a template before
 anyone relies on it.
 
-Built-in templates ship in the image (DISPATCH_PATHS_DIR).  Templates
-authored by users are saved next to the DB (DISPATCH_USER_PATHS_DIR,
-default <db dir>/paths) so they survive rebuilds and are not repo code.
+Built-in templates ship inside the package (dispatch/builtin_paths,
+overridable with DISPATCH_PATHS_DIR).  Templates authored by users are
+saved next to the DB (DISPATCH_USER_PATHS_DIR, default <db dir>/paths)
+so they survive upgrades and are not repo code.
 """
 
 import copy
@@ -61,7 +62,7 @@ WHOLE_PLACEHOLDER_RE = re.compile(r"^\{(\w+)\}$")
 def builtin_paths_dir():
     return os.environ.get(
         "DISPATCH_PATHS_DIR",
-        os.path.join(os.path.dirname(os.path.dirname(__file__)), "paths"),
+        os.path.join(os.path.dirname(__file__), "builtin_paths"),
     )
 
 

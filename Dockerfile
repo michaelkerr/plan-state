@@ -1,19 +1,20 @@
 FROM python:3.13-slim
 
 WORKDIR /app
-ENV PYTHONPATH=/app
 
-COPY mcp-server/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+COPY pyproject.toml README.md LICENSE ./
+COPY dispatch/ dispatch/
+COPY planstate/ planstate/
+RUN pip install --no-cache-dir .
 
-COPY plansync/ ./plansync/
-COPY pyproject.toml ./
-RUN pip install --no-cache-dir -e .
+ENV DISPATCH_DB=/data/dispatch.db
+ENV DISPATCH_CLIENT=hermes
+ENV DISPATCH_EVAL_MINUTES=0
 
-COPY mcp-server/ ./mcp-server/
-COPY sync/ ./sync/
-COPY init-db.py ./
-
+VOLUME /data
 EXPOSE 8082
 
-CMD ["python3", "mcp-server/server.py"]
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8082/health')"
+
+CMD ["dispatch", "serve", "--http", "--port", "8082", "--api"]

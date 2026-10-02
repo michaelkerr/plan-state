@@ -1,109 +1,190 @@
 # Plan-State
 
-A condition-aware activity orchestrator for personal life domains -- lawn care, gardening, hunting, health, home maintenance. It turns LLM-generated domain plans into managed tasks that automatically re-cascade when conditions change, activities complete, or dates slip.
+Condition-aware tasks for personal life domains — lawn, garden, hunting, home.
 
-Plan-state is a **capability** that registers into a running [Hermes Agent](https://github.com/NousResearch/hermes-agent) instance. It does not run standalone.
+You describe a season once as a reusable **path template**. Dispatch turns it into items with triggers (a date, the weather, another item finishing, or a mix). An hourly job pulls the forecast and fires what's due. Your agent (Claude Desktop, Cursor, or [Hermes](https://github.com/NousResearch/hermes-agent) on Telegram) lists items as `G1` / `L2` and closes them when you say "done G1".
 
-## How it works
+```
+You ──► agent (MCP) ──► dispatch ──► SQLite
+                           ▲
+              hourly eval ─┘  weather + triggers
+```
 
-1. **Plan**: Talk to Reach (Hermes) via Telegram. Describe what you want to manage -- "help me plan my fall garden succession for Zone 7a." The LLM generates a structured domain plan and writes it to the plan store via MCP tools.
+## Requirements
 
-2. **Monitor**: Every morning at 6 AM, a deterministic cron job (zero LLM tokens) pulls weather, evaluates trigger conditions against current data, fires triggers when conditions are met, and cascades dates through prep/follow-up chains.
+- Python 3.10+ **or** Docker
+- A free [OpenWeatherMap](https://home.openweathermap.org/users/sign_up) API key (new keys can take up to an hour to activate)
+- An MCP client: Claude Desktop, Cursor, or Hermes
 
-3. **Brief**: At 6:15 AM, an LLM-backed cron job generates a concise morning briefing from the sync results and delivers it to Telegram. At 5 PM, a deterministic evening nudge lists anything still open today (silent when nothing is due).
+## 1. Install
 
-4. **Act**: Work from the briefing. When you finish something, tell Reach ("done with the fungicide") -- it marks the activity complete and cascades follow-ups immediately.
-
-5. **Adapt**: When something changes, message Reach. The LLM updates the plan store, and the next cron run re-cascades everything.
-
-## Prerequisites
-
-- A running Hermes Agent instance (the sibling `reach/` repo handles this)
-- Docker
-- API keys: `OPENWEATHERMAP_API_KEY` (set in `reach/.env`)
-
-## Setup
+**Docker** (keeps the database in a volume; recommended):
 
 ```bash
-# 1. Start the Hermes infrastructure
-cd ../reach
+git clone https://github.com/michaelkerr/plan-state.git
+cd plan-state
+cp .env.sample .env          # fill in OWM_API_KEY and DISPATCH_LOCATION
 docker compose up -d
-
-# 2. Register plan-state into the running instance
-cd ../plan-state
-./register.sh
+docker compose exec dispatch dispatch doctor
 ```
 
-`register.sh` copies scripts, initializes the database, installs Python dependencies, and registers cron jobs. The entire repo is volume-mounted into the container at `/opt/plansync/`:
+`DISPATCH_LOCATION` is `City,ST,US` — e.g. `Nashville,TN,US`. Doctor should report the weather key, location, and three built-in templates. Warnings about "no items" and "no eval yet" are expected.
 
-- **Skills**: loaded via Hermes `external_dirs` (configured in Reach's `config.yaml`) — live edits
-- **Scripts**: thin wrappers copied into `/opt/data/scripts/` (Hermes requires scripts within this directory). They delegate to volume-mounted code, so the actual logic is live-editable.
-- **MCP server**: configured in Reach's `config.yaml` (`mcp_servers.plansync`) — live edits
-- **Sync pipeline, schema, init**: accessed directly via the volume mount — live edits
-
-Re-run `register.sh` after adding new script files, editing script wrappers, or adding new cron jobs.
-
-## Verify
+**Local** (no Docker):
 
 ```bash
-docker exec -it reach-gateway hermes chat -q 'Use the plansync tools to list domains'
+git clone https://github.com/michaelkerr/plan-state.git
+cd plan-state
+python3 -m pip install -e ".[dev]"
+cp .env.sample .env          # same two values; export them in your shell
+set -a && source .env && set +a
+dispatch init
+dispatch doctor
 ```
 
-## What's built
+The database defaults to `~/.plansync/dispatch.db`. Custom templates you save later live next to it in `~/.plansync/paths/`.
 
-- **SQLite plan store**: domains, activities, steps, condition cache, weather log, and a source-attributed activity log
-- **MCP server**: tools for reading and writing plan state (load/amend domains, update/complete/defer activities, record observations, query upcoming items and weather); shared by Hermes and Claude as peer agents, with writes attributed per client (see `docs/claude-setup.md`)
-- **Hourly sync pipeline**: deterministic five-stage pipeline -- weather pull, condition evaluation, trigger firing, date cascade, overdue promotion. Zero LLM tokens.
-- **State machines**: all status changes route through transition tables with a cascade reactor; batch-grouped operations support undo
-- **Morning briefing**: LLM-generated daily briefing from sync output (includes recent field observations)
-- **Evening nudge**: deterministic reminder of anything still open today; silent on clear days
-- **Dossier export**: per-domain markdown state files (`/opt/data/plansync/domains/{slug}/dossier.md`), regenerated hourly, so sessions without MCP access can orient instantly
-- **Declarative plan sync**: load_domain diffs declarations against DB state, creates/updates/flags without auto-deleting
-- **Registration script**: One-command install into a running Hermes instance
+## 2. Connect an agent
 
-See [ROADMAP.md](ROADMAP.md) for current priorities and [ARCHITECTURE.md](ARCHITECTURE.md) for how the system fits together.
+Skills tell the agent how to talk. MCP gives it the tools. Both are required — opening the repo in Cursor loads skills, not the server.
 
-## Product decisions
+### Claude Desktop
 
-**Why Hermes Agent, not raw Claude sessions?** Persistent cross-session memory, a skill system, Telegram integration, and cron scheduling come built-in. No custom infrastructure to maintain.
+**Docker:** compose already publishes MCP at `http://127.0.0.1:8082/sse`. Add this under Settings → Developer → Edit Config:
 
-**Why a deterministic cron pipeline?** Weather evaluation, trigger logic, and date cascading are all rule-based. Running them without LLM involvement means zero token cost, zero latency, and zero external dependency beyond the weather API. The LLM is reserved for where it adds value: planning conversations and contextual briefings. The local model is swappable via Hermes config -- the system is model-agnostic.
-
-**Why Telegram as the only task surface?** Todoist integration was removed in 2026-07: it was ~300 lines of sync code plus the system's most fragile external dependency (its API sunset broke the pipeline once), and daily polling meant checkbox completions were only detected next-day anyway. Conversational completion is immediate, cascades follow-ups on the spot, and can capture field notes a checkbox never could.
-
-**Why SQLite?** Single-user system on a home server. No need for a database server process.
-
-**Why split repos?** Hermes infrastructure (`reach/`) can be upgraded, reconfigured, or redeployed independently from this capability. Plan-state registers itself and doesn't care how Hermes is hosted.
-
-## Architecture
-
+```json
+{
+  "mcpServers": {
+    "dispatch": {
+      "url": "http://127.0.0.1:8082/sse"
+    }
+  }
+}
 ```
-User (Telegram)
-    │
-    ▼
-Hermes Agent (Docker) ──── MCP ────► plan-state MCP server ──► SQLite DB
-    │                                                              ▲
-    │ cron 6:00 AM                                                 │
-    ▼                                                              │
-sync_pipeline.py ── Weather API ──► condition eval ──► trigger ──► cascade
-    │
-    │ cron 6:15 AM
-    ▼
-briefing-context.py ──► LLM ──► Telegram briefing
-    │
-    │ cron 5:00 PM
-    ▼
-evening_nudge.py ──► "still open today" ──► Telegram (silent if clear)
+
+**Local install:**
+
+```json
+{
+  "mcpServers": {
+    "dispatch": {
+      "command": "dispatch",
+      "args": ["serve", "--stdio"],
+      "env": {
+        "OWM_API_KEY": "your-key",
+        "DISPATCH_LOCATION": "Nashville,TN,US",
+        "DISPATCH_CLIENT": "claude",
+        "DISPATCH_EVAL_MINUTES": "60"
+      }
+    }
+  }
+}
 ```
+
+Restart Claude Desktop. You should see `status`, `done`, `skip`, `defer`, `note`, `instantiate`, `draft_path`, `undo`.
+
+```bash
+mkdir -p ~/.claude/skills
+for s in dispatch plan-state path-authoring briefing; do
+  ln -sfn "$(pwd)/skills/$s" ~/.claude/skills/$s
+done
+```
+
+### Cursor
+
+Skills load from `skills/` when this repo is the open workspace. Add the MCP server so the tools appear.
+
+Put this in **`.cursor/mcp.json`** (project) or Cursor Settings → MCP.
+
+**Docker** (after `docker compose up -d`):
+
+```json
+{
+  "mcpServers": {
+    "dispatch": {
+      "url": "http://127.0.0.1:8082/sse"
+    }
+  }
+}
+```
+
+**Local install:**
+
+```json
+{
+  "mcpServers": {
+    "dispatch": {
+      "command": "dispatch",
+      "args": ["serve", "--stdio"],
+      "env": {
+        "OWM_API_KEY": "your-key",
+        "DISPATCH_LOCATION": "Nashville,TN,US",
+        "DISPATCH_CLIENT": "cursor",
+        "DISPATCH_EVAL_MINUTES": "60"
+      }
+    }
+  }
+}
+```
+
+Reload MCP in Cursor. Same eight tools as Claude.
+
+### Hermes (Telegram)
+
+See [hermes/README.md](hermes/README.md). Hermes cron drives eval, briefing, and the evening nudge; the built-in scheduler stays off.
+
+## 3. Put a plan in
+
+Talk to the agent:
+
+- "Help me set up my fall garden" — instantiates a built-in **template** (`garden-fall`, `lawn-cool-season`, `hunting-bow`) with this season's dates and places. They are not hardcoded calendars.
+- "Make a template for spring garlic" — writes a new path, then you instantiate it
+
+Or from the CLI, after doctor is clean:
+
+```bash
+dispatch paths
+dispatch check-path garden-fall \
+  --param zone=7a \
+  --param frost_date_fall=2026-10-20 \
+  --param 'beds=[{"name":"Bed 1"}]'
+dispatch instantiate garden-fall garden \
+  --param zone=7a \
+  --param frost_date_fall=2026-10-20 \
+  --param 'beds=[{"name":"Bed 1"}]'
+dispatch eval --location "$DISPATCH_LOCATION"
+dispatch briefing
+```
+
+Reply "done G1" (or `dispatch done G1`) to close an item.
+
+## How a day works
+
+| When | What | Tokens |
+|---|---|---|
+| Every hour | Weather pull + trigger eval | none |
+| Morning | Briefing with completion codes (`G1`, `L2`) | none (text is already written) |
+| Evening | Nudge if anything is still due; silent if not | none |
+| When you talk | Agent calls `done` / `skip` / `defer` / `note` | your chat |
+
+Docker Compose runs the hourly eval inside the container (`DISPATCH_EVAL_MINUTES=60`). Hermes users turn that off and use cron instead.
+
+## What's in the box
+
+- **dispatch** — the only running service: SQLite store, eval, briefing, 8 MCP tools, CLI
+- **plan-state** — library/CLI for domain context and reconcile (no server)
+- **3 example path templates** — fall garden, cool-season lawn, bow hunting (params, not 2026 literals)
+- **Skills** — domain setup, path authoring, completions by code, briefing
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the component map, [INTENTS.md](INTENTS.md) for the design, and [ROADMAP.md](ROADMAP.md) for what's next.
 
 ## Development
 
 ```bash
-# Run tests
-python3 -m pytest tests/ -q
-
-# Run a single sync stage locally (requires PLANSYNC_DB set)
-PLANSYNC_DB=path/to/test.db python3 -c "from sync.sync_pipeline import check_overdue; ..."
+python3 -m pip install -e ".[dev]"
+python3 -m pytest -q
 ```
 
-See [ROADMAP.md](ROADMAP.md) for current priorities, [ARCHITECTURE.md](ARCHITECTURE.md) for the system map, and [DECISIONS.md](DECISIONS.md) for the architectural decision log. The initial build history (49 steps) is archived in [BUILD_PLAN.archived.md](BUILD_PLAN.archived.md) and [docs/archive/BUILD_PLAN_V1.md](docs/archive/BUILD_PLAN_V1.md).
+Push and pull-request runs the same suite on GitHub Actions (Python 3.10 and 3.12).
+
+After code changes on Docker: `docker compose up -d --build`. The database volume is kept.

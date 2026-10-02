@@ -8,8 +8,7 @@ import pytest
 def db(tmp_path, monkeypatch):
     db_path = str(tmp_path / "test.db")
     monkeypatch.setenv("DISPATCH_DB", db_path)
-    paths_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "paths")
-    monkeypatch.setenv("DISPATCH_PATHS_DIR", paths_dir)
+    monkeypatch.delenv("DISPATCH_PATHS_DIR", raising=False)
     from dispatch.store import init_db
     init_db(db_path)
     return db_path
@@ -70,6 +69,8 @@ class TestInstantiate:
             "zone": "7a",
             "lawn_sqft": 8000,
             "grass_type": "tall-fescue",
+            "spring_window": "2026-02-15",
+            "overseed_window": "2026-08-15",
         }
         ids = instantiate("lawn-cool-season", "lawn", params)
         assert len(ids) >= 5
@@ -81,6 +82,8 @@ class TestInstantiate:
         pre = next(i for i in items if "pre-emergent" in i["name"].lower())
         labels = [c["label"] for c in pre["checklist"]]
         assert any("8000" in label for label in labels)
+        assert pre["trigger_def"]["earliest_date"] == "2026-02-15"
+        assert "tall-fescue" in pre["description"]
 
     def test_hunting(self, db):
         from dispatch.instantiate import instantiate
@@ -88,7 +91,7 @@ class TestInstantiate:
 
         params = {
             "season_open": "2026-10-01",
-            "season_close": "2026-01-15",
+            "season_close": "2027-01-15",
         }
         ids = instantiate("hunting-bow", "hunting", params)
         assert len(ids) >= 8
@@ -101,7 +104,7 @@ class TestInstantiate:
         opening = next(i for i in items if i["name"] == "Opening day hunt")
         assert opening["trigger_def"]["date"] == "2026-10-01"
         late = next(i for i in items if i["name"] == "Late season strategy")
-        assert late["trigger_def"]["date"] == "2026-01-15"
+        assert late["trigger_def"]["date"] == "2027-01-15"
 
     def test_missing_required_param(self, db):
         from dispatch.instantiate import instantiate

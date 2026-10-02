@@ -91,7 +91,7 @@ def new_id():
 
 
 def db_path():
-    return os.environ.get("DISPATCH_DB", DEFAULT_DB_PATH)
+    return os.path.expanduser(os.environ.get("DISPATCH_DB", DEFAULT_DB_PATH))
 
 
 def init_db(path=None):

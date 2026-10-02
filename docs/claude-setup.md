@@ -1,46 +1,67 @@
-# Registering plansync in Claude desktop
+# Claude Desktop
 
-Claude gets the same MCP tools Hermes has — same server, same database, all
-writes stay container-side. Client identity defaults to `hermes` for all
-SSE connections (the `PLANSYNC_CLIENT` env var is set in the container's
-environment, not per-connection).
+Two pieces: the MCP server (tools) and the skills (how to talk).
 
-## Claude desktop config
+## MCP server
 
-The plansync MCP server runs in the `reach-plansync` container, exposing
-an SSE endpoint on port 8082 (mapped to the host at `127.0.0.1:8082`).
-Add to `claude_desktop_config.json` (Settings → Developer → Edit Config):
+**Docker Compose** (from this repo's `docker compose up -d`):
 
 ```json
 {
   "mcpServers": {
-    "plansync": {
-      "url": "http://localhost:8082/sse"
+    "dispatch": {
+      "url": "http://127.0.0.1:8082/sse"
     }
   }
 }
 ```
 
-## Verifying
+**Local install** (`pip install -e .`):
 
-1. Claude desktop → tools list shows the plansync tools.
-2. Test with any read tool (e.g. `get_domains`).
-3. Health check from the terminal:
-
-```
-curl http://localhost:8082/health
-```
-
-## Rebuilding after code changes
-
-Code is baked into the container image at build time (not volume-mounted).
-After editing plan-state code, rebuild and restart:
-
-```
-cd ../reach
-docker compose build plansync
-docker compose up -d plansync
+```json
+{
+  "mcpServers": {
+    "dispatch": {
+      "command": "dispatch",
+      "args": ["serve", "--stdio"],
+      "env": {
+        "OWM_API_KEY": "your-key",
+        "DISPATCH_LOCATION": "Nashville,TN,US",
+        "DISPATCH_CLIENT": "claude",
+        "DISPATCH_EVAL_MINUTES": "60"
+      }
+    }
+  }
+}
 ```
 
-The container health check (`/health`) confirms the server is running and
-the DB is reachable. Claude Desktop reconnects automatically on restart.
+Config file: Claude → Settings → Developer → Edit Config
+(`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS).
+Restart Claude Desktop after editing.
+
+You should see: `status`, `done`, `skip`, `defer`, `note`, `instantiate`,
+`draft_path`, `undo`.
+
+## Skills
+
+```bash
+mkdir -p ~/.claude/skills
+cd /path/to/plan-state
+for s in dispatch plan-state path-authoring briefing; do
+  ln -sfn "$(pwd)/skills/$s" ~/.claude/skills/$s
+done
+```
+
+These are the same files Hermes loads. Do not copy them — a symlink stays current.
+
+## Verify
+
+```bash
+# Docker
+curl -sf http://127.0.0.1:8082/health
+
+# Local
+dispatch doctor
+```
+
+Then in Claude: "what's open?" should call `status`.

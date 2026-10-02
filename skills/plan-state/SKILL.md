@@ -23,7 +23,10 @@ Walk the user through these steps:
    - Hunting: stands (name, type, location), food plots
    - Lawn: zones (front, back, side — if different treatment)
    - Home: systems (HVAC, roof, appliances)
-4. **Set parameters** — zone, frost dates, season dates, acreage, etc.
+4. **Set parameters** — whatever the chosen path marks required. Built-ins:
+   - `garden-fall`: zone, frost_date_fall, beds
+   - `lawn-cool-season`: zone, spring_window, overseed_window (optional lawn_sqft, grass_type)
+   - `hunting-bow`: season_open, season_close
 5. **Choose paths** — call `status` and read `paths` for what is
    available.  Built-ins are `garden-fall`, `lawn-cool-season`, and
    `hunting-bow`; the user may also have custom paths.  If nothing fits,

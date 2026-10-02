@@ -2,9 +2,7 @@
 
 ## System overview
 
-dispatch is a single SQLite-backed service that stores items with triggers, evaluates them hourly against the weather, and produces Telegram briefings. It runs as the `reach-plansync-new` container next to Hermes Agent (Reach) on a Mac Mini. Three callers share it: MCP tools (Hermes over SSE, Claude Desktop over stdio), an HTTP API (Hermes cron jobs), and a CLI. Items are created only by instantiating path templates; plan-state (`planstate/`) is a library/CLI for domain context and reconcile, not a service.
-
-The pre-dispatch system (`plansync/`, `mcp-server/`, `sync/`, container `reach-plansync`) is disabled in Hermes and awaiting removal; see MIGRATION.md.
+dispatch is a single SQLite-backed service that stores items with triggers, evaluates them hourly against the weather, and produces briefings. A first-time install is `docker compose up` from this repo (see README.md) or `pip install -e .` plus `dispatch serve --stdio`. Three callers share it: MCP tools (SSE or stdio), an HTTP API (`/api/eval`, `/api/briefing`, `/api/nudge`), and a CLI. Items are created only by instantiating path templates; plan-state (`planstate/`) is a library/CLI, not a service. Optional Telegram install: [hermes/README.md](hermes/README.md).
 
 ## Component map
 
@@ -27,7 +25,7 @@ The pre-dispatch system (`plansync/`, `mcp-server/`, `sync/`, container `reach-p
 ### dispatch/paths.py — path templates
 
 - **Purpose**: Everything about templates that does not touch the DB.
-- **Locations**: built-ins in `DISPATCH_PATHS_DIR` (baked into the image from `paths/`); custom templates in `DISPATCH_USER_PATHS_DIR` (default `<db dir>/paths`, i.e. `/data/paths` on the data volume)
+- **Locations**: built-ins ship in the package (`dispatch/builtin_paths/`, overridable with `DISPATCH_PATHS_DIR`); custom templates in `DISPATCH_USER_PATHS_DIR` (default `<db dir>/paths`)
 - **Key functions**:
   - `validate_path()` — structural errors (block save/instantiate) and warnings (hardcoded dates, unused params, after-triggers pointed at per-entity items)
   - `validate_params()` / `apply_defaults()` — supplied values against declared params
@@ -64,7 +62,7 @@ The pre-dispatch system (`plansync/`, `mcp-server/`, `sync/`, container `reach-p
 
 ### Hourly eval (cron, zero tokens)
 
-1. Hermes cron runs `scripts/dispatch-eval.sh` → `curl http://plansync-new:8082/api/eval`
+1. Scheduler (built-in loop, or Hermes cron) hits `GET/POST /api/eval` (Hermes: `curl http://dispatch:8082/api/eval`)
 2. `pull_weather` upserts today's weather_log row (high/low from the 3-hourly forecast and current temp)
 3. `evaluate_conditions` updates consecutive-day counts and `is_met` for watching items
 4. `evaluate_triggers` fires items whose triggers are satisfied → status `due`, `due_date` set
@@ -103,24 +101,12 @@ The pre-dispatch system (`plansync/`, `mcp-server/`, `sync/`, container `reach-p
 ## Integration points
 
 - **OpenWeatherMap** — current + 5-day/3-hour forecast, once per eval. Failures return empty data and later stages still run.
-- **Hermes Agent** — MCP client over SSE (`mcp_servers.dispatch` in `$REACH_DATA_PATH/config.yaml`); cron jobs curl the HTTP API; skills loaded live from `/opt/projects/plan-state/skills`
-- **Claude Desktop** — MCP client over stdio via `docker exec` into `reach-plansync-new`
-- **Telegram** — delivery surface for briefing and nudge via the Hermes gateway
+- **Hermes Agent** (optional) — MCP over SSE; cron curls the HTTP API; skills from this repo's `skills/`. See [hermes/README.md](hermes/README.md).
+- **Claude Desktop / Cursor** — MCP over SSE (`http://127.0.0.1:8082/sse` for Docker Compose) or stdio (`dispatch serve --stdio`)
+- **Telegram** — briefing and nudge via Hermes when that install is used
 
 ## Deployment topology
 
-```
-Mac Mini (host)
-├── Projects/plan-state/   (this repo; mounted into reach-gateway at /opt/projects/plan-state)
-├── Projects/reach/        (compose file, .env)
-└── reach-data/            ($REACH_DATA_PATH, backed up nightly; Hermes config + legacy plansync data)
+`docker compose up` in this repo: container `dispatch`, volume `dispatch-data`, host port 8082, built-in eval every 60 minutes.
 
-Docker
-├── reach-gateway          Hermes: MCP client, cron, skills from /opt/projects/plan-state/skills
-├── reach-plansync-new     dispatch (image plansync-dispatch:latest)
-│   ├── :8082 in network (host 127.0.0.1:8083) — /sse, /api/*, /health
-│   └── /data  ← plansync-new-data volume: dispatch.db, paths/ (custom templates)
-└── reach-plansync         legacy plansync (disabled in Hermes, pending removal)
-```
-
-The `plansync-new-data` volume is not under `$REACH_DATA_PATH`, so it is not covered by the nightly backup (tracked in ROADMAP.md).
+Hermes installs put dispatch on the same Docker network (service name `dispatch`) and turn the built-in scheduler off.

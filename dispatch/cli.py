@@ -2,7 +2,7 @@
 
 Usage:
     dispatch init           Initialize the DB
-    dispatch serve          Run MCP server (--stdio or --http)
+    dispatch serve          Run MCP server (--stdio or --http, --eval-every MINUTES)
     dispatch eval           Run full eval pipeline (weather + conditions + triggers)
     dispatch briefing       Generate morning briefing
     dispatch nudge          Generate evening nudge
@@ -39,6 +39,9 @@ def main():
     serve_p.add_argument("--host", default="0.0.0.0")
     serve_p.add_argument("--api", action="store_true",
                          help="Enable HTTP API endpoints")
+    serve_p.add_argument("--eval-every", type=int, default=None, metavar="MINUTES",
+                         help="Run the weather/trigger eval every N minutes "
+                              "(default: DISPATCH_EVAL_MINUTES, 0 = off)")
 
     eval_p = sub.add_parser("eval", help="Run eval pipeline")
     eval_p.add_argument("--location", default=os.environ.get("DISPATCH_LOCATION", ""))
@@ -118,11 +121,12 @@ def _cmd_init():
 def _cmd_serve(args):
     if args.http:
         from dispatch.server import run_http
-        run_http(port=args.port, host=args.host, enable_api=args.api)
+        run_http(port=args.port, host=args.host, enable_api=args.api,
+                 eval_every=args.eval_every)
     else:
         from dispatch.server import run_stdio
         import asyncio
-        asyncio.run(run_stdio())
+        asyncio.run(run_stdio(eval_every=args.eval_every))
 
 
 def _cmd_eval(args):

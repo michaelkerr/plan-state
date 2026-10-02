@@ -1,8 +1,8 @@
 ---
 name: dispatch
-description: Close, skip, or list dispatch items by nudge codes such as G1, H3, or L1. Use when the user says done, skip, closed, completed, or asks what is open or due. Call the dispatch MCP tools. Do not write a daily log and do not use plansync tools.
-version: 1.0.0
-author: plansync
+description: Close, skip, or list dispatch items by nudge codes such as G1, H3, or L1. Use when the user says done, skip, closed, completed, or asks what is open or due. Call the dispatch MCP tools. Do not write a daily log instead of calling the tool.
+version: 1.1.0
+author: plan-state
 ---
 
 # Dispatch
@@ -30,12 +30,10 @@ If a call returns several matches, ask which one. Do not guess.
 ## When the user asks what is open
 
 Call `mcp__dispatch__status` and show its `formatted` text.
-Do not call `mcp__plansync__get_domains`, `get_domain_plan`, or `get_upcoming`.
 
 ## Do not
 
 - Do not write these codes into a daily log instead of calling the tool
-- Do not read the plansync-briefing skill for this
 - Do not evaluate weather — the hourly job does that
 
 ## Briefing codes

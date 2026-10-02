@@ -15,19 +15,23 @@ from dispatch.store import (
     get_items, transition, derive_conditions, log_event,
 )
 
-OWM_KEY = os.environ.get("OWM_API_KEY", "")
 OWM_BASE = "https://api.openweathermap.org/data/2.5"
+
+
+def owm_key():
+    return os.environ.get("OWM_API_KEY", "")
 
 
 # --- Weather ---
 
 def pull_weather(conn, location, today=None):
     today = today or datetime.now().strftime("%Y-%m-%d")
-    if not OWM_KEY:
+    key = owm_key()
+    if not key:
         return {"skipped": "OWM_API_KEY not set"}
 
-    current = _fetch_current(location)
-    forecast = _fetch_forecast(location)
+    current = _fetch_current(location, key)
+    forecast = _fetch_forecast(location, key)
 
     high, low = _derive_daily_range(forecast, today)
     if current.get("main"):
@@ -70,11 +74,11 @@ def pull_weather(conn, location, today=None):
     return {"location": location, "date": today, "high": high, "low": low}
 
 
-def _fetch_current(location):
+def _fetch_current(location, key):
     try:
         resp = requests.get(
             f"{OWM_BASE}/weather",
-            params={"q": location, "appid": OWM_KEY, "units": "imperial"},
+            params={"q": location, "appid": key, "units": "imperial"},
             timeout=10,
         )
         resp.raise_for_status()
@@ -83,11 +87,11 @@ def _fetch_current(location):
         return {}
 
 
-def _fetch_forecast(location):
+def _fetch_forecast(location, key):
     try:
         resp = requests.get(
             f"{OWM_BASE}/forecast",
-            params={"q": location, "appid": OWM_KEY, "units": "imperial"},
+            params={"q": location, "appid": key, "units": "imperial"},
             timeout=10,
         )
         resp.raise_for_status()
@@ -116,22 +120,24 @@ def _extract_conditions(current):
 
 # --- Condition evaluation ---
 
-def evaluate_conditions(conn, location):
-    today = datetime.now().strftime("%Y-%m-%d")
-    weather = conn.execute(
-        "SELECT * FROM weather_log WHERE location=? AND weather_date=?",
-        (location, today),
-    ).fetchone()
-    if not weather:
-        return {"skipped": "no weather data for today"}
+METRIC_COLUMNS = {
+    "daily_high": "temp_high",
+    "temp_high": "temp_high",
+    "daily_low": "temp_low",
+    "temp_low": "temp_low",
+}
 
-    weather = row_to_dict(weather)
-    metric_values = {
-        "daily_high": weather.get("temp_high"),
-        "daily_low": weather.get("temp_low"),
-        "temp_high": weather.get("temp_high"),
-        "temp_low": weather.get("temp_low"),
-    }
+
+def evaluate_conditions(conn, location, today=None):
+    today = today or datetime.now().strftime("%Y-%m-%d")
+    days = [row_to_dict(r) for r in conn.execute(
+        "SELECT weather_date, temp_high, temp_low FROM weather_log "
+        "WHERE location=? AND weather_date<=? "
+        "ORDER BY weather_date DESC LIMIT 60",
+        (location, today),
+    ).fetchall()]
+    if not days or days[0]["weather_date"] != today:
+        return {"skipped": "no weather data for today"}
 
     rows = conn.execute(
         """SELECT cc.*, i.status FROM conditions_cache cc
@@ -142,16 +148,12 @@ def evaluate_conditions(conn, location):
     updated = 0
     for row in rows:
         row = dict(row)
-        metric_val = metric_values.get(row["metric"])
+        column = METRIC_COLUMNS.get(row["metric"])
+        metric_val = days[0].get(column) if column else None
         if metric_val is None:
             continue
 
-        met = _check_condition(metric_val, row["operator"], row["value"])
-        if met:
-            new_consec = row["consecutive_days"] + 1
-        else:
-            new_consec = 0
-
+        new_consec = _streak(days, column, row["operator"], row["value"])
         is_met = 1 if new_consec >= row["sustained_days"] else 0
 
         conn.execute(
@@ -165,6 +167,25 @@ def evaluate_conditions(conn, location):
 
     conn.commit()
     return {"evaluated": updated, "date": today}
+
+
+def _streak(days, column, operator, threshold):
+    """Consecutive calendar days, ending today, on which the rule held.
+
+    Recomputed from weather_log on every run so hourly and daily evals
+    agree.  A missing day ends the streak.
+    """
+    streak = 0
+    expected = datetime.strptime(days[0]["weather_date"], "%Y-%m-%d")
+    for day in days:
+        if day["weather_date"] != expected.strftime("%Y-%m-%d"):
+            break
+        value = day.get(column)
+        if value is None or not _check_condition(value, operator, threshold):
+            break
+        streak += 1
+        expected -= timedelta(days=1)
+    return streak
 
 
 def _check_condition(actual, operator, threshold):
@@ -273,6 +294,6 @@ def run_eval(location, today=None):
     results = {}
     with connect() as conn:
         results["weather"] = pull_weather(conn, location, today)
-        results["conditions"] = evaluate_conditions(conn, location)
+        results["conditions"] = evaluate_conditions(conn, location, today)
         results["triggers"] = evaluate_triggers(conn, today)
     return results

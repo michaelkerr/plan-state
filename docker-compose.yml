@@ -1,0 +1,28 @@
+# Standalone dispatch: MCP server + HTTP API + built-in hourly eval.
+#
+#   cp .env.sample .env      # fill in OWM_API_KEY and DISPATCH_LOCATION
+#   docker compose up -d
+#   docker compose exec dispatch dispatch doctor
+#
+# Running under Hermes instead? See hermes/README.md; Hermes cron drives
+# eval there, so DISPATCH_EVAL_MINUTES is 0.
+
+services:
+  dispatch:
+    build: .
+    image: plan-state-dispatch:latest
+    container_name: dispatch
+    restart: unless-stopped
+    environment:
+      - OWM_API_KEY=${OWM_API_KEY:-}
+      - DISPATCH_LOCATION=${DISPATCH_LOCATION:?Set DISPATCH_LOCATION in .env, e.g. Nashville,TN,US}
+      - DISPATCH_EVAL_MINUTES=${DISPATCH_EVAL_MINUTES:-60}
+      - DISPATCH_CLIENT=${DISPATCH_CLIENT:-agent}
+      - TZ=${TZ:-America/Chicago}
+    volumes:
+      - dispatch-data:/data
+    ports:
+      - "127.0.0.1:${DISPATCH_PORT:-8082}:8082"
+
+volumes:
+  dispatch-data:

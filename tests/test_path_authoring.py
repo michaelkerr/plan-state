@@ -8,7 +8,8 @@ import pytest
 import yaml
 
 
-REPO_PATHS = os.path.join(os.path.dirname(os.path.dirname(__file__)), "paths")
+REPO_PATHS = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                          "dispatch", "builtin_paths")
 
 
 @pytest.fixture
@@ -89,6 +90,13 @@ class TestBuiltinsValid:
     def test_builtin_has_no_errors(self, db, path_id):
         from dispatch.paths import load_path
         assert _errors(load_path(path_id)) == []
+
+    @pytest.mark.parametrize("path_id", ["garden-fall", "lawn-cool-season", "hunting-bow"])
+    def test_builtin_is_reusable(self, db, path_id):
+        from dispatch.paths import load_path
+        warnings = _warnings(load_path(path_id))
+        assert not any("hardcoded date" in w for w in warnings), warnings
+        assert not any("never used" in w for w in warnings), warnings
 
     def test_base_template_is_clean(self):
         assert _errors(BASE) == []
@@ -230,7 +238,11 @@ class TestPreview:
 
     def test_defaults_fill_preview(self, db):
         from dispatch.paths import check_path, load_path
-        result = check_path(load_path("lawn-cool-season"), {"zone": "7a"})
+        result = check_path(load_path("lawn-cool-season"), {
+            "zone": "7a",
+            "spring_window": "2026-02-15",
+            "overseed_window": "2026-08-15",
+        })
         assert result["valid"], result["errors"]
         pre = result["preview"][0]
         assert any("5000" in label for label in pre["checklist"])
@@ -298,7 +310,11 @@ class TestSaveAndUse:
     def test_instantiate_applies_defaults(self, db):
         from dispatch.instantiate import instantiate
         from dispatch.store import connect, get_items
-        instantiate("lawn-cool-season", "lawn", {"zone": "7a"})
+        instantiate("lawn-cool-season", "lawn", {
+            "zone": "7a",
+            "spring_window": "2026-02-15",
+            "overseed_window": "2026-08-15",
+        })
         with connect() as conn:
             items = get_items(conn, domain="lawn")
         pre = next(i for i in items if "pre-emergent" in i["name"].lower())

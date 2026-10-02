@@ -1,0 +1,46 @@
+# Merge onto a Hermes/Reach compose file:
+#   docker compose -f docker-compose.yml \
+#     -f /path/to/plan-state/hermes/docker-compose.override.yaml \
+#     up -d dispatch
+#
+# Build the image first from the plan-state repo:
+#   docker build -t plan-state-dispatch:latest .
+#
+# Required in the Hermes .env:
+#   OWM_API_KEY=...          (or OPENWEATHERMAP_API_KEY)
+#   DISPATCH_LOCATION=Nashville,TN,US
+#
+# Service name is `dispatch` so skills and cron use http://dispatch:8082.
+# DISPATCH_EVAL_MINUTES=0: Hermes cron drives eval.
+
+services:
+  dispatch:
+    image: plan-state-dispatch:latest
+    container_name: dispatch
+    restart: unless-stopped
+    environment:
+      - OWM_API_KEY=${OWM_API_KEY:-${OPENWEATHERMAP_API_KEY}}
+      - DISPATCH_LOCATION=${DISPATCH_LOCATION:?Set DISPATCH_LOCATION in .env}
+      - DISPATCH_DB=/data/dispatch.db
+      - DISPATCH_CLIENT=hermes
+      - DISPATCH_EVAL_MINUTES=0
+      - TZ=${TZ:-America/Chicago}
+    volumes:
+      - dispatch-data:/data
+    ports:
+      - "127.0.0.1:${DISPATCH_PORT:-8082}:8082"
+    networks:
+      - infra
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8082/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  dispatch-data:
+
+networks:
+  infra:
+    external: true

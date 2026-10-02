@@ -1,8 +1,11 @@
-# Claude Code local permissions
-.claude/settings.local.json
-
-# Secrets
+# Secrets — never commit real keys. .env.sample is the template.
 .env
+.env.*
+!.env.sample
+
+# Local editor / agent config (never publish)
+.claude/
+.cursor/
 
 # macOS
 ._*
@@ -14,8 +17,8 @@
 *.db-shm
 *.db.pre-migration
 
-# Domain data and runtime output live in reach-data (/opt/data/plansync/),
-# never in this repo. Safety net in case something runs with old defaults:
+# Domain data and runtime output live next to the DB, never in this repo.
+# Safety net in case something runs with old defaults:
 domains/
 sync-output/
 

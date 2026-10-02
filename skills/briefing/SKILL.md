@@ -1,66 +1,48 @@
 ---
 name: briefing
-description: Re-run or re-trigger the morning briefing with curl -sf http://plansync-new:8082/api/briefing and send that text unchanged. Never curl reach-plansync. Also for what's due today and the 5 PM nudge.
-version: 1.0.0
-author: plansync
+description: Re-run the morning briefing or evening nudge and send the text unchanged, or answer "what's due today". Under Hermes, fetch it with curl -sf http://dispatch:8082/api/briefing; elsewhere call the dispatch status tool.
+version: 1.1.0
+author: plan-state
 ---
 
 # Briefing
 
-The dispatch system generates deterministic briefings and nudges
-directly from the database.  No LLM tokens are spent on data gathering
-— everything comes from `dispatch briefing` or `dispatch nudge`.
+dispatch generates the briefing and nudge deterministically from the
+database.  No LLM tokens are spent gathering data, and the text is
+already formatted for chat — never rewrite or summarize it.
 
-## Morning briefing (6:15 AM)
+## Morning briefing
 
-Run: `dispatch briefing`
-
-The output includes:
+The briefing includes:
 - **Conditions** — directly under the title. Location, today's weather, and any trigger condition still being watched.
 - **Overdue** — still due, date before today. Every line has a close code.
 - **Due today** — due date is today. Every line has a close code.
 - **The next 7 days** — still open, date inside the next 7 days, not already listed above. Every line has a close code. A `~` line has not reached its date yet; `done` still closes it and `skip` still drops it.
 
-Deliver the output to Telegram as-is.  The briefing is already formatted
-for chat — do not rewrite or summarize it.
+## Evening nudge
 
-## Evening nudge (5 PM)
+Lists items still due today with completion codes.  Empty output means
+nothing is open: send nothing.  When there are items, deliver them and
+add: "Reply `done <code>` to close, `skip <code>` to drop."
 
-Run: `dispatch nudge`
+## On demand
 
-The output lists items still due today with completion codes.
-If the output is empty, send nothing (silent when clear).
+When the user says "re-run the briefing", "send the nudge", or "what's due":
 
-When there are items, deliver and add: "Reply `done <code>` to close, `skip <code>` to drop."
+- **Hermes** (dispatch reachable on the Docker network):
 
-## On-demand
+  ```bash
+  curl -sf http://dispatch:8082/api/briefing   # or /api/nudge
+  ```
 
-When the user says "re trigger the briefing", "re-run the briefing", or
-"what's due":
+  Send stdout unchanged.
 
-```bash
-curl -sf http://plansync-new:8082/api/briefing
-```
+- **Any other client** (Claude, Cursor): call the dispatch `status` tool
+  and show its `formatted` text unchanged.
 
-Send that stdout unchanged. Do not summarize it. Do not call plansync
-MCP tools. Do not run `morning-briefing.sh`. Do not curl
-`http://reach-plansync:8082/api/briefing` — that server is the old
-database.
+## Scheduling
 
-## Cron setup
-
-Add these to Hermes cron:
-
-```
-# Hourly eval (weather + triggers)
-0 * * * *  dispatch eval --location "$DISPATCH_LOCATION"
-
-# Morning briefing at 6:15 AM
-15 6 * * *  dispatch briefing
-
-# Evening nudge at 5 PM
-0 17 * * *  dispatch nudge
-```
-
-The eval must run before the briefing so today's weather and triggers
-are current.
+The hourly eval must run before the briefing so today's weather and
+triggers are current.  Hermes cron setup is in `hermes/README.md`.
+Without Hermes, run the server with `--eval-every 60` (or
+`DISPATCH_EVAL_MINUTES=60`) and ask for the briefing when you want it.

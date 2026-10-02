@@ -1,0 +1,135 @@
+id: lawn-cool-season
+version: "1.1.0"
+name: Cool-Season Lawn Care
+description: >
+  Annual treatment calendar for cool-season grass (fescue, bluegrass,
+  rye).  Pre-emergent, fertilization, overseeding, and winterizing
+  gated on air temperature (daily high/low from the weather API).
+
+params:
+  - name: zone
+    type: string
+    required: true
+    description: "USDA zone (e.g. '7a')"
+  - name: lawn_sqft
+    type: number
+    required: false
+    description: "Lawn square footage for product calculations"
+    default: 5000
+  - name: grass_type
+    type: string
+    required: false
+    description: "Primary grass type (e.g. 'tall-fescue')"
+    default: "tall-fescue"
+  - name: spring_window
+    type: date
+    required: true
+    description: "Do not apply spring pre-emergent before this date (YYYY-MM-DD)"
+  - name: overseed_window
+    type: date
+    required: true
+    description: "Do not overseed before this date (YYYY-MM-DD)"
+
+items:
+  - ref: spring-pre-emergent
+    name: "Apply spring pre-emergent"
+    description: >
+      {grass_type}, USDA zone {zone}. Fire when daytime highs stay at or
+      above 55°F for 3 days (air temp proxy for soil warming).
+    group: "Spring"
+    trigger:
+      type: condition
+      rules:
+        - metric: daily_high
+          operator: ">="
+          value: 55
+          sustained_days: 3
+      earliest_date: "{spring_window}"
+    sort_order: 1
+    checklist:
+      - label: "Confirm soil has started to warm"
+      - label: "Calculate product amount for {lawn_sqft} sqft"
+      - label: "Apply evenly with spreader"
+      - label: "Water in lightly"
+
+  - ref: spring-fertilize
+    name: "Spring fertilize"
+    description: "First feeding after green-up"
+    group: "Spring"
+    trigger:
+      type: after
+      item_ref: spring-pre-emergent
+      event: completed
+      offset_days: 30
+    sort_order: 2
+    checklist:
+      - label: "Apply balanced fertilizer (e.g. 10-10-10)"
+      - label: "Water in well"
+
+  - ref: summer-stress-watch
+    name: "Summer stress monitoring"
+    description: "Watch for heat stress and drought; raise mowing height"
+    group: "Summer"
+    trigger:
+      type: condition
+      rules:
+        - metric: daily_high
+          operator: ">="
+          value: 90
+          sustained_days: 3
+    sort_order: 3
+    checklist:
+      - label: "Raise mower to highest setting"
+      - label: "Water deeply 1 inch per week if no rain"
+      - label: "Stop fertilizing"
+
+  - ref: fall-overseed
+    name: "Fall overseeding"
+    description: "Overseed when daytime temps consistently below 85°F"
+    group: "Fall"
+    trigger:
+      type: condition
+      rules:
+        - metric: daily_high
+          operator: "<="
+          value: 85
+          sustained_days: 3
+      earliest_date: "{overseed_window}"
+    sort_order: 4
+    checklist:
+      - label: "Mow low and bag clippings"
+      - label: "Dethatch or aerate"
+      - label: "Spread seed at recommended rate"
+      - label: "Top-dress with thin layer of compost"
+      - label: "Keep moist for 2-3 weeks"
+
+  - ref: fall-fertilize
+    name: "Fall fertilize"
+    group: "Fall"
+    trigger:
+      type: after
+      item_ref: fall-overseed
+      event: completed
+      offset_days: 21
+    sort_order: 5
+    checklist:
+      - label: "Apply starter fertilizer if overseeded"
+      - label: "Or balanced fall fertilizer"
+
+  - ref: winterize
+    name: "Winterize lawn"
+    description: "Final mow and winterizer fertilizer"
+    group: "Winter Prep"
+    trigger:
+      type: condition
+      rules:
+        - metric: daily_high
+          operator: "<="
+          value: 50
+          sustained_days: 5
+    sort_order: 6
+    checklist:
+      - label: "Final mow at normal height"
+      - label: "Apply winterizer fertilizer"
+      - label: "Clean and store mower"
+      - label: "Drain irrigation if applicable"
