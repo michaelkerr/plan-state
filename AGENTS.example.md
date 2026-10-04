@@ -1,10 +1,10 @@
-<!-- Claude Code: CLAUDE.md in this repo points here. -->
+<!-- Claude Code: CLAUDE.md in this repo points here. Copy to AGENTS.md for a local always-applied playbook (AGENTS.md is gitignored). -->
 
 # Plan-State
 
 Instructions for agents **working on this repository**. Humans installing or using the product start at [README.md](README.md). Using dispatch from chat (done G1, new path, briefing) is the skills under `skills/`, not this file.
 
-This file is the always-applied public playbook. Operator topology for a specific machine does not belong here.
+Copy this file to `AGENTS.md` to add local workflow (product-delivery, your deploy). Do not put one machine's compose names in this example.
 
 ## What this repo is
 
@@ -36,7 +36,7 @@ When work is done:
 
 1. Update ROADMAP.md: remove the item from NOW, update "What's built" if capabilities changed.
 2. Promote an item from Next to NOW if the NOW bucket is thin.
-3. Update this file if new conventions or patterns emerged.
+3. Update this file if new conventions or patterns emerged (and `AGENTS.md` if you keep a local copy).
 4. Update ARCHITECTURE.md if the system's structure changed.
 5. Log significant decisions in DECISIONS.md.
 
@@ -62,6 +62,7 @@ One service (dispatch) owns the DB. Three callers: MCP tools (interactive), the 
 ```
 plan-state/
 ├── README.md                # First-time install, then connect an agent
+├── AGENTS.example.md        # Public playbook; copy to AGENTS.md locally
 ├── INTENTS.md / ROADMAP.md / ARCHITECTURE.md / DECISIONS.md
 ├── Dockerfile, docker-compose.yml, .env.sample
 ├── plugin.json, mcp.json    # Agent Plugins v1 (Hermes plugin install)
@@ -109,7 +110,7 @@ plan-state/
 - Do not insert items directly or hand-write templates into the repo — go through `instantiate` and `draft_path`
 - Do not add external service dependencies to the hourly job without asking first
 - Do not forget to rebuild the dispatch image after code changes (skills are live; code is not)
-- Do not commit domain data, custom paths, runtime output, `.env`, `.claude/`, or `.cursor/`
+- Do not commit domain data, custom paths, runtime output, `.env`, `.claude/`, `.cursor/`, or `AGENTS.md`
 
 ## Decisions
 

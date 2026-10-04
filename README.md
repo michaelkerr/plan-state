@@ -183,8 +183,9 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the component map, [INTENTS.md](INTEN
 ```bash
 python3 -m pip install -e ".[dev]"
 python3 -m pytest -q
+cp AGENTS.example.md AGENTS.md   # local always-applied playbook (gitignored)
 ```
 
-Push and pull-request runs the same suite on GitHub Actions (Python 3.10 and 3.12).
+Push and pull-request runs the same suite on GitHub Actions (Python 3.10 and 3.12). Agent conventions for every clone live in [AGENTS.example.md](AGENTS.example.md).
 
 After code changes on Docker: `docker compose up -d --build`. The database volume is kept.
